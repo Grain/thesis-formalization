@@ -167,6 +167,22 @@ Section IntPerms.
         apply sep_step_rg; intros; auto.
   Qed.
 
+  Lemma rewrite_spin {R} : (ITree.spin : itree E R) = Tau (ITree.spin).
+  Proof.
+    intros. apply bisimulation_is_eq.
+    ginit. gcofix CIH. gstep. unfold ITree.spin. constructor.
+    apply Reflexive_eqit_gen_eq.
+  Qed.
+  Example typing_spin {R} : forall P Q, typing P Q (ITree.spin : itree E R).
+  Proof.
+    pcofix CIH. intros. pstep. constructor 1. split.
+    - exists (Z.of_nat 0). eexists. exists (Z.of_nat 0). rewrite rewrite_spin. constructor.
+    - intros. rewrite rewrite_spin in H1. inversion H1; subst; split; intuition.
+      exists P. split.
+      + right. auto.
+      + exists p; split; [| split]; intuition.
+  Qed.
+
   Lemma typing_lte {R} : forall P P' Q Q' (t : itree E R),
       typing P Q t ->
       P' ⊑ P ->
@@ -182,7 +198,6 @@ Section IntPerms.
       + eexists. split; [| split]; eauto.
     - constructor 2. etransitivity; eauto. etransitivity; eauto.
   Qed.
-
 
   Lemma typing_bind {R1 R2} : forall P Q R (t : itree E R1) (k : R1 -> itree E R2),
       typing P Q t ->
@@ -214,4 +229,30 @@ Section IntPerms.
     - rewritebisim @bind_ret_l. eapply paco3_mon_bot; eauto. eapply typing_lte; eauto.
       reflexivity.
   Qed.
+
+  Lemma typing_perm_frame {R : Type} : forall P Q P' (t : itree E R),
+      typing P Q t ->
+      typing (P * P') (fun r => Q r * P') t.
+  Proof.
+    pcofix CIH. intros. pinversion H0; subst.
+    - pstep. constructor 1. split.
+      { destruct H as ((c & t' & c' & Hstep) & ?).
+        do 3 eexists; eauto. }
+      destruct H as (_ & H).
+      intros pp c (p & p' & Hp & Hp' & Hsep & Hpp) Hpre t' c' Hstep.
+      edestruct H; eauto.
+      { apply Hpp. apply Hpre. }
+      split.
+      { apply Hpp. constructor. left. assumption. }
+      destruct H2 as (P'' & Ht' & p'' & Hpp' & Hsep_step & Hpre').
+      exists (P'' * P'). pclearbot. split; auto.
+      exists (p'' ** p'). split; [| split].
+      + apply sep_conj_Perms_perm; auto.
+      + eapply sep_step_lte; eauto. eapply sep_step_sep_conj_l; auto.
+      + split; [| split]; auto.
+        apply Hpp in Hpre. destruct Hpre as (? & ? & ?). respects.
+        apply H4; auto.
+    - pstep. constructor 2. apply sep_conj_Perms_monotone; intuition.
+  Qed.
+
 End IntPerms.
