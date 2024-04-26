@@ -21,7 +21,6 @@ From ITree Require Import
      Basics.MonadProp
      Events.State
      Events.Nondeterminism
-     Eq.Eq
      Eq.UpToTaus
      Eq.EqAxiom.
 
@@ -110,7 +109,7 @@ Proof.
   rewrite (itree_eta_ t0). destruct (observe t0); simpl.
   - rewritebisim @unfold_bind. constructor; auto.
   - constructor; auto.
-  - constructor; auto.
+  - constructor; auto. intros; red; auto.
 Qed.
 
 Lemma bind_snd {R1 R2} (t : itree E R2) (r1 : R1) :
@@ -121,7 +120,7 @@ Proof.
   rewrite (itree_eta_ t0). destruct (observe t0); simpl.
   - rewritebisim @unfold_bind. constructor; auto.
   - constructor; auto.
-  - constructor; auto.
+  - constructor; auto. intros; red; auto.
 Qed.
 
 Lemma step_fmap_fst {R1 R2} : forall (t : itree E R2) (t' : itree E (R1 * R2)) c c' (r1 : R1),

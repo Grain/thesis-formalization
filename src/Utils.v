@@ -193,3 +193,13 @@ Variant modifyE C : Type -> Type :=
 Global Arguments Modify {C} f.
 
 Definition sceE (C : Type) := (exceptE unit +' modifyE C +' nondetE).
+
+Ltac rewritebisim lem := pose proof lem as bisim;
+                         eapply bisimulation_is_eq in bisim;
+                         rewrite bisim;
+                         clear bisim.
+
+Ltac rewritebisim_in lem H := pose proof lem as bisim;
+                              eapply bisimulation_is_eq in bisim;
+                              rewrite bisim in H;
+                              clear bisim.

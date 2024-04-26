@@ -24,7 +24,7 @@ From ITree Require Import
      Basics.MonadProp
      Events.State
      Events.Nondeterminism
-     Eq.Eq
+     Eq
      Eq.Shallow
      Eq.UpToTaus
      Eq.EqAxiom.
