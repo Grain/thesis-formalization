@@ -909,7 +909,7 @@ Section MemoryPerms.
     - rewrite Nat.add_0_r. eapply sep_step_lte; eauto.
       etransitivity.
       + eapply sep_step_lte; [| reflexivity]. apply lte_l_sep_conj_perm.
-      + cbn in *. eapply sep_step_lte; eauto. intros ? []. constructor; auto.
+      + cbn in *. eapply sep_step_lte; eauto. apply sep_step_write_perm.
   Qed.
 
   Lemma IsNull1 A xi xs rw o (P : @VPermType Si Ss A) :
