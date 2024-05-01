@@ -45,16 +45,23 @@ Section HeapPerms.
       e := true;
     |}.
 
-  Definition read' (c : config) p :=
-    read (m c) p.
-  Definition write' (c : config) p v :=
-    match write (m c) p v with
-    | Some mem => Some
-                   {|
-                     m := mem;
-                     e := e c;
-                   |}
-    | None => None
+  Definition read' (c : config) (p : Value) :=
+    match p with
+    | VPtr p => read (m c) p
+    | VNum _ => None
+    end.
+  Definition write' (c : config) (p v : Value) :=
+    match p with
+    | VPtr p =>
+        match write (m c) p v with
+        | Some mem => Some
+                       {|
+                         m := mem;
+                         e := e c;
+                       |}
+        | None => None
+        end
+    | VNum _ => None
     end.
 
   Variant E : Type -> Type :=
@@ -67,20 +74,16 @@ Section HeapPerms.
         step (Tau t) c t c
     | step_load : forall k c p v,
         read' c p = Some v ->
-        step (vis (Load (VPtr p)) k) c (k v) c
+        step (vis (Load p) k) c (k v) c
     | step_store : forall k c c' p v,
         write' c p v = Some c' ->
-        step (vis (Store (VPtr p) v) k) c (k tt) c'
+        step (vis (Store p v) k) c (k tt) c'
     | step_load_fail : forall k c p,
         read' c p = None ->
-        step (vis (Load (VPtr p)) k) c (k (VNum 0)) (error_config c)
+        step (vis (Load p) k) c (k (VNum 0)) (error_config c)
     | step_store_fail : forall k c p v,
         write' c p v = None ->
-        step (vis (Store (VPtr p) v) k) c (k tt) (error_config c)
-    | step_load_invalid : forall k c b,
-        step (vis (Load (VNum b)) k) c (k (VNum 0)) (error_config c)
-    | step_store_invalid : forall k c b v,
-        step (vis (Store (VNum b) v) k) c (k tt) (error_config c)
+        step (vis (Store p v) k) c (k tt) (error_config c)
   .
   Inductive multistep {R} : itree E R -> config -> itree E R -> config -> Prop :=
   | multistep_refl : forall t c, multistep t c t c
@@ -208,18 +211,18 @@ Section HeapPerms.
         rewritebisim_in @bind_vis H5. inversion H5. apply Eqdep.EqdepTheory.inj_pair2 in H10; subst.
         destruct (H _ _ H2 H3 _ _ (step_store_fail _ _ _ _ H6)) as (? & P' & ? & (p' & ? & ? & ?)).
         pclearbot. split; auto. exists P'. split; eauto.
-      + pose proof @eqitree_inv_bind_vis.
-        edestruct H5 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H6; reflexivity | |];
-          apply bisimulation_is_eq in H7; subst; [| inversion Hstep].
-        rewritebisim_in @bind_vis H4. inversion H4. apply Eqdep.EqdepTheory.inj_pair2 in H10; subst.
-        destruct (H _ _ H2 H3 _ _ (step_load_invalid _ _ _)) as (? & P' & ? & (p' & ? & ? & ?)).
-        pclearbot. split; auto. exists P'. split; eauto.
-      + pose proof @eqitree_inv_bind_vis.
-        edestruct H5 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H6; reflexivity | |];
-          apply bisimulation_is_eq in H7; subst; [| inversion Hstep].
-        rewritebisim_in @bind_vis H6. inversion H6. apply Eqdep.EqdepTheory.inj_pair2 in H9; subst.
-        destruct (H _ _ H2 H3 _ _ (step_store_invalid _ _ _ _)) as (? & P' & ? & (p' & ? & ? & ?)).
-        pclearbot. split; auto. exists P'. split; eauto.
+      (* + pose proof @eqitree_inv_bind_vis. *)
+      (*   edestruct H5 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H6; reflexivity | |]; *)
+      (*     apply bisimulation_is_eq in H7; subst; [| inversion Hstep]. *)
+      (*   rewritebisim_in @bind_vis H4. inversion H4. apply Eqdep.EqdepTheory.inj_pair2 in H10; subst. *)
+      (*   destruct (H _ _ H2 H3 _ _ (step_load_invalid _ _ _)) as (? & P' & ? & (p' & ? & ? & ?)). *)
+      (*   pclearbot. split; auto. exists P'. split; eauto. *)
+      (* + pose proof @eqitree_inv_bind_vis. *)
+      (*   edestruct H5 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H6; reflexivity | |]; *)
+      (*     apply bisimulation_is_eq in H7; subst; [| inversion Hstep]. *)
+      (*   rewritebisim_in @bind_vis H6. inversion H6. apply Eqdep.EqdepTheory.inj_pair2 in H9; subst. *)
+      (*   destruct (H _ _ H2 H3 _ _ (step_store_invalid _ _ _ _)) as (? & P' & ? & (p' & ? & ? & ?)). *)
+      (*   pclearbot. split; auto. exists P'. split; eauto. *)
     - rewritebisim @bind_ret_l. eapply paco3_mon_bot; eauto. eapply typing_lte; eauto.
       reflexivity.
   Qed.
