@@ -126,6 +126,17 @@ Section HeapPerms.
 
   Definition typing {R} := paco3 (@typing_gen R) bot3.
 
+  Instance Proper_eq_Perms_typing {R} : Proper (eq_Perms ==> (pointwise_relation _ eq_Perms) ==> eq ==> flip impl) (@typing R).
+  Proof.
+    pcofix CIH. repeat intro. subst. pstep. pinversion H3; subst.
+    - constructor 1. destruct H. split; auto. intros.
+      edestruct H2; eauto. rewrite <- H0; auto. split; auto.
+      destruct H8 as (? & ? & ? & ? & ? & ?). eexists. split.
+      right. pclearbot. eapply CIH. 3: reflexivity. 3: apply H8.
+      reflexivity. auto. eauto.
+    - constructor 2; eauto. rewrite H0. rewrite H1. auto.
+  Qed.
+
   Lemma rewrite_spin {R} : (ITree.spin : itree E R) = Tau (ITree.spin).
   Proof.
     intros. apply bisimulation_is_eq.
@@ -282,6 +293,30 @@ Section HeapPerms.
     - inversion H2.
   Qed.
 
+  (* Lemma typing_soundness {R} : forall P Q (t : itree E R), *)
+  (*     typing P Q t -> *)
+  (*     forall p c, p ∈ (P * singleton_Perms no_error_perm) -> *)
+  (*            pre p c -> *)
+  (*            forall r c', multistep t c (Ret r) c' -> exists q, q ∈ (Q r) /\ pre q c'. *)
+  (* Proof. *)
+  (*   intros P Q t Htyping p0 c (p & no_err & Hp & Hno_err & Hlte) Hpre t' c' Hmultistep. *)
+  (*   remember (Ret t'). revert t' Heqi. *)
+  (*   induction Hmultistep; intros; subst. *)
+  (*   - punfold Htyping. inversion Htyping; subst. *)
+  (*     apply Hno_err. apply Hlte. auto. *)
+  (*   - pose proof Hpre as H'. rename H into Hstep. *)
+  (*     apply Hlte in H'. destruct H' as (Hprep & Hpreno_err & Hsep). *)
+  (*     destruct (typing_multistep _ _ _ Htyping _ _ Hp Hprep _ _ Hmultistep) as (P' & Htyping' & p' & Hp' & Hsep_step & Hprep'). *)
+  (*     eapply (typing_soundness_step _ _ _ Htyping'). *)
+  (*     3: apply Hstep. *)
+  (*     exists p', no_error_perm. split; [| split; [| split]]; cbn; auto; try reflexivity. *)
+  (*     apply Hsep_step in Hsep. eapply separate_upwards_closed; eauto. *)
+  (*     split; [| split]; auto. *)
+  (*     2: { apply Hsep_step in Hsep. eapply separate_upwards_closed; eauto. } *)
+  (*     apply IHHmultistep; eauto. *)
+  (* Qed. *)
+
+
   Lemma typing_soundness {R} : forall P Q (t : itree E R),
       typing P Q t ->
       forall p c, p ∈ (P * singleton_Perms no_error_perm) ->
@@ -382,7 +417,147 @@ Section HeapPerms.
       in_Perms _ := a = a'
     |}.
 
-  (*** TODO EQP RULES *)
+  Lemma EqRefl A (P : Perms) (xi : A) :
+    P ⊑ P * (eqp xi) xi.
+  Proof.
+    repeat intro.
+    exists p, top_perm. split; [| split; [| split]]; cbn; eauto.
+    - apply separate_top.
+    - rewrite sep_conj_perm_top. reflexivity.
+  Qed.
+
+  Lemma EqSym (A : Type) (xi yi : A) :
+    (eqp yi) xi ⊑ (eqp xi) yi.
+  Proof.
+    repeat intro; cbn in *; subst; reflexivity.
+  Qed.
+
+  Lemma EqTrans (A : Type) (xi yi zi : A) :
+    (eqp yi) xi * (eqp zi) yi ⊑ (eqp zi) xi.
+  Proof.
+    repeat intro. destruct H as (? & ? & ? & ? & ? & ?). cbn in *; subst. reflexivity.
+  Qed.
+
+  Lemma EqCtx (A B : Type) (xi yi : A) (f : A -> B) :
+    (eqp yi) xi ⊑ (eqp (f yi)) (f xi).
+  Proof.
+    repeat intro. congruence.
+  Qed.
+
+  Lemma EqDup (A : Type) (xi yi : A) :
+    (eqp yi) xi ⊑ (eqp yi) xi * (eqp yi) xi.
+  Proof.
+    repeat intro. cbn in *. subst. exists top_perm, top_perm.
+    split; [| split; [| split]]; auto.
+    - apply separate_top.
+    - rewrite sep_conj_perm_top. apply top_perm_is_top.
+  Qed.
+
+  Lemma Cast (A : Type) (P : A -> Perms) xi yi :
+    (eqp yi) xi * P yi ⊑ P xi.
+  Proof.
+    repeat intro. destruct H as (e & p' & Heq & Hp & Hsep & Hlte).
+    cbn in Heq. subst.
+    eapply Perms_downwards_closed; eauto. etransitivity. 2: apply lte_r_sep_conj_perm. eauto.
+  Qed.
+
+  (*
+  Lemma PtrI_Read l l' (T : Value -> Perms) :
+    read_Perms l (eqp l') * T l' ⊑ read_Perms l T.
+  Proof.
+    repeat intro. destruct l. rename p into p'.
+    destruct H as (p & t & (P & (v & ?) & Hp) & Hp' & Hsep & Hlte). subst.
+    destruct Hp as (? & ? & ? & ? & Hsep' & Hlte'). cbn in *. subst.
+    eexists. split; [exists v; reflexivity |].
+    eapply Perms_downwards_closed; eauto.
+    do 2 eexists. split; [| split; [| split]]. apply H. apply Hp'.
+    + symmetry. symmetry in Hsep. eapply separate_upwards_closed; eauto.
+      etransitivity; eauto. apply lte_l_sep_conj_perm.
+    + apply sep_conj_perm_monotone; intuition.
+      etransitivity; eauto. apply lte_l_sep_conj_perm.
+  Qed.
+  Lemma PtrI_Write l v (T : Value -> Perms) :
+    write_Perms l (eqp v) * T v ⊑ write_Perms l T.
+  Proof.
+    repeat intro. destruct l. rename p into p'.
+    destruct H as (p & t & (P & (v' & ?) & Hp) & Hp' & Hsep & Hlte). subst.
+    destruct Hp as (? & ? & ? & ? & Hsep' & Hlte'). cbn in *. subst.
+    eexists. split; [exists v'; reflexivity |].
+    eapply Perms_downwards_closed; eauto.
+    do 2 eexists. split; [| split; [| split]]. apply H. apply Hp'.
+    + symmetry. symmetry in Hsep. eapply separate_upwards_closed; eauto.
+      etransitivity; eauto. apply lte_l_sep_conj_perm.
+    + apply sep_conj_perm_monotone; intuition.
+      etransitivity; eauto. apply lte_l_sep_conj_perm.
+  Qed.
+
+  Lemma PtrE_Read {R} P l T T' (t : itree E R) :
+    (forall v, typing (P * read_Perms l (eqp v) * T v) T' t) ->
+    typing (P * read_Perms l T) T' t.
+  Proof.
+    intros H. unfold read_Perms in *.
+    setoid_rewrite <- sep_conj_Perms_assoc in H.
+    setoid_rewrite sep_conj_Perms_join_commute in H.
+    (* setoid_rewrite sep_conj_Perms_commut in H. *)
+    (* setoid_rewrite sep_conj_Perms_commut in H. *)
+    (* setoid_rewrite sep_conj_Perms_assoc in H. *)
+    (* setoid_rewrite sep_conj_Perms_join_commute in H. *)
+    rewrite sep_conj_Perms_commut.
+    rewrite sep_conj_Perms_join_commute.
+
+    pcofix CIH. intros H. pstep. constructor.
+
+
+
+    repeat intro. rename p into p''. destruct H0 as (p & p' & Hp & Hptr & Hsep & Hlte).
+    destruct xi; [contradiction | destruct a].
+    destruct Hptr as (? & (? & ?) & ?). subst.
+    destruct H2 as (pptr & pt & Hptr & Hpt & Hsep' & Hlte').
+    eapply H; eauto. exists (p ** pptr), pt.
+    split; [| split; [| split]]; eauto.
+    - do 2 eexists. split; [| split; [| split]]. eauto. 3: reflexivity.
+      + eexists. split; eauto. do 2 eexists.
+        split; [| split; [| split]]. eauto. reflexivity. 2: apply sep_conj_perm_top'.
+        apply separate_top.
+      + eapply separate_upwards_closed; eauto. etransitivity; eauto. apply lte_l_sep_conj_perm.
+    - symmetry. symmetry in Hsep'. apply separate_sep_conj_perm; auto.
+      + symmetry. eapply separate_upwards_closed; eauto. etransitivity; eauto.
+        apply lte_r_sep_conj_perm.
+      + symmetry. eapply separate_upwards_closed; eauto. etransitivity; eauto.
+        apply lte_l_sep_conj_perm.
+    - etransitivity; eauto. rewrite sep_conj_perm_assoc.
+      apply sep_conj_perm_monotone; auto; reflexivity.
+  Qed.
+
+  Lemma ReadDup o xi yi :
+    xi :: ptr (R, o, eqp yi) ⊑
+      xi :: ptr (R, o, eqp yi) * xi :: ptr (R, o, eqp yi).
+  Proof.
+    repeat intro. cbn in *. destruct xi; [contradiction |].
+    destruct a as [b o']. unfold offset in *.
+    destruct H as (? & (v & ?) & ?). subst.
+    exists (read_perm (b, o' + o) v), (read_perm (b, o' + o) v).
+    destruct H0 as (pread & peq & Hpread & Hpeq & Hsep & Hlte).
+    cbn in Hpread, Hpeq. subst.
+    assert (read_perm (b, o' + o) v ∈ ptr_Perms R (VPtr (b, o' + o)) tt (eqp v)).
+    {
+      eexists. split; eauto. cbn in *. exists (read_perm (b, o' + o) v), top_perm.
+      split; [| split; [| split]]. 2: reflexivity.
+      - split; intros; auto.
+      - apply separate_top.
+      - rewrite sep_conj_perm_top. reflexivity.
+    }
+    split; [| split; [| split]]; auto.
+    apply read_separate.
+    constructor; intros; eauto.
+    - split; [| split]; auto. 1, 2: apply Hpread; apply Hlte; auto.
+      apply read_separate.
+    - split; apply Hpread; apply Hlte; auto.
+    - apply Hlte. constructor. left. apply Hpread. induction H0; auto.
+      + destruct H0; auto.
+      + etransitivity; eauto.
+  Qed.
+   *)
 
   Lemma typing_load ptr (Q : Value -> Perms) :
     typing
@@ -415,7 +590,7 @@ Section HeapPerms.
     typing
       (write_Perms ptr P * Q val)
       (fun _ => write_Perms ptr Q)
-      (vis (Store (VPtr ptr) val) (fun _ => Ret tt)).
+      (trigger (Store (VPtr ptr) val)).
   Proof.
   pstep. constructor 1. split.
   - eexists {| m := _; e := false |}. do 2 eexists.
@@ -472,22 +647,11 @@ Section HeapPerms.
     }
   Qed.
 
-  Instance Proper_eq_Perms_typing {R} : Proper (eq_Perms ==> (pointwise_relation _ eq_Perms) ==> eq ==> flip impl) (@typing R).
-  Proof.
-    pcofix CIH. repeat intro. subst. pstep. pinversion H3; subst.
-    - constructor 1. destruct H. split; auto. intros.
-      edestruct H2; eauto. rewrite <- H0; auto. split; auto.
-      destruct H8 as (? & ? & ? & ? & ? & ?). eexists. split.
-      right. pclearbot. eapply CIH. 3: reflexivity. 3: apply H8.
-      reflexivity. auto. eauto.
-    - constructor 2; eauto. rewrite H0. rewrite H1. auto.
-  Qed.
-
   Lemma typing_store {R} ptr val (P Q : Value -> @Perms config) (r : R) :
     typing
       (write_Perms ptr P)
       (fun _ => write_Perms ptr (eqp val))
-      (vis (Store (VPtr ptr) val) (fun _ => Ret tt)).
+      (trigger (Store (VPtr ptr) val)).
   Proof.
     assert (top_Perms ≡ eqp val val).
     { split; repeat intro; cbn; auto. }
