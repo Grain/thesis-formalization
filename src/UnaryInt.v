@@ -72,6 +72,20 @@ Section IntPerms.
     split; cbn; intros; subst; auto; reflexivity.
   Qed.
 
+  Example up_perm_sep b b' :
+    up_perm b ⊥ up_perm b'.
+  Proof.
+    split; intros; auto.
+  Qed.
+
+  Example up_perm_ex_updown_perm_not_sep b b' :
+    up_perm b ⊥ ex_updown_perm b' -> False.
+  Proof.
+    intros. destruct H. cbn in *.
+    specialize (sep_r (Z.of_nat 0) (Z.of_nat 1)).
+    lia.
+  Qed.
+
   Definition up_Perms_b (b : Z) : Perms :=
     singleton_Perms (up_perm b).
   Definition up_Perms : Perms :=
@@ -86,6 +100,19 @@ Section IntPerms.
     singleton_Perms (ex_updown_perm b).
   Definition ex_updown_Perms : Perms :=
     join_Perms (fun P => exists b, P = ex_updown_Perms_b b).
+
+  Example up_Perms_ex_updown_Perms_sep_conj :
+    up_Perms * ex_updown_Perms ≡ bottom_Perms.
+  Proof.
+    split; repeat intro.
+    - destruct H as (? & ? & (? & (? & ?) & ?) & (? & (? & ?) & ?) & ? & ?). subst.
+      cbn in *.
+      eapply up_perm_ex_updown_perm_not_sep.
+      eapply separate_upwards_closed; eauto.
+      symmetry.
+      eapply separate_upwards_closed; eauto. symmetry. auto.
+    - inversion H.
+  Qed.
 
   Example lte_updown_up_Perms :
     updown_Perms ⊑ up_Perms.

@@ -415,6 +415,21 @@ Section HeapPerms.
   Definition write_Perms (ptr : addr) (P : Value -> Perms) : Perms :=
     join_Perms (fun Q => exists y : Value, Q = singleton_Perms (write_perm ptr y) * P y).
 
+  Variant RW: Type := R | W.
+
+  Definition ptr_Perms (rw : RW) (p : Value) (T : Value -> Perms) : Perms :=
+    match p with
+    | VNum _ => bottom_Perms
+    | VPtr p =>
+        join_Perms (fun P => exists (v : Value),
+                        P = singleton_Perms (match rw with
+                                             | R => read_perm p v
+                                             | W => write_perm p v
+                                             end) *
+                              (T v))
+    end.
+  (* TODO: do we need this? *)
+
   Program Definition eqp {A} (a a' : A) : @Perms config :=
     {|
       in_Perms _ := a = a'
@@ -462,6 +477,33 @@ Section HeapPerms.
     repeat intro. destruct H as (e & p' & Heq & Hp & Hsep & Hlte).
     cbn in Heq. subst.
     eapply Perms_downwards_closed; eauto. etransitivity. 2: apply lte_r_sep_conj_perm. eauto.
+  Qed.
+
+  Lemma ReadDup p v :
+    read_Perms p (eqp v) ⊑
+    read_Perms p (eqp v) * read_Perms p (eqp v).
+  Proof.
+    intros p' (? & (v' & ?) & Hp'). subst.
+    exists (read_perm p v'), (read_perm p v').
+    destruct Hp' as (pread & peq & Hpread & Hpeq & Hsep & Hlte).
+    cbn in Hpread, Hpeq. subst.
+    assert (read_perm p v' ∈ read_Perms p (eqp v')).
+    {
+      eexists. split; eauto. cbn in *. exists (read_perm p v'), top_perm.
+      split; [| split; [| split]]. 2: reflexivity.
+      - split; intros; auto.
+      - apply separate_top.
+      - rewrite sep_conj_perm_top. reflexivity.
+    }
+    split; [| split; [| split]]; auto.
+    apply read_separate.
+    constructor; intros; eauto.
+    - split; [| split]; auto. 1, 2: apply Hpread; apply Hlte; auto.
+      apply read_separate.
+    - split; apply Hpread; apply Hlte; auto.
+    - apply Hlte. constructor. left. apply Hpread. induction H0; auto.
+      + destruct H0; auto.
+      + etransitivity; eauto.
   Qed.
 
   (*
@@ -530,35 +572,6 @@ Section HeapPerms.
         apply lte_l_sep_conj_perm.
     - etransitivity; eauto. rewrite sep_conj_perm_assoc.
       apply sep_conj_perm_monotone; auto; reflexivity.
-  Qed.
-
-  Lemma ReadDup o xi yi :
-    xi :: ptr (R, o, eqp yi) ⊑
-      xi :: ptr (R, o, eqp yi) * xi :: ptr (R, o, eqp yi).
-  Proof.
-    repeat intro. cbn in *. destruct xi; [contradiction |].
-    destruct a as [b o']. unfold offset in *.
-    destruct H as (? & (v & ?) & ?). subst.
-    exists (read_perm (b, o' + o) v), (read_perm (b, o' + o) v).
-    destruct H0 as (pread & peq & Hpread & Hpeq & Hsep & Hlte).
-    cbn in Hpread, Hpeq. subst.
-    assert (read_perm (b, o' + o) v ∈ ptr_Perms R (VPtr (b, o' + o)) tt (eqp v)).
-    {
-      eexists. split; eauto. cbn in *. exists (read_perm (b, o' + o) v), top_perm.
-      split; [| split; [| split]]. 2: reflexivity.
-      - split; intros; auto.
-      - apply separate_top.
-      - rewrite sep_conj_perm_top. reflexivity.
-    }
-    split; [| split; [| split]]; auto.
-    apply read_separate.
-    constructor; intros; eauto.
-    - split; [| split]; auto. 1, 2: apply Hpread; apply Hlte; auto.
-      apply read_separate.
-    - split; apply Hpread; apply Hlte; auto.
-    - apply Hlte. constructor. left. apply Hpread. induction H0; auto.
-      + destruct H0; auto.
-      + etransitivity; eauto.
   Qed.
    *)
 
