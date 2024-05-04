@@ -210,6 +210,11 @@ Section IntPerms.
       + exists p; split; [| split]; intuition.
   Qed.
 
+  Lemma typing_bottom_step {R} : forall Q (t : itree E R), (exists c t' c', step t c t' c') -> typing bottom_Perms Q t.
+  Proof.
+    intros. pstep. constructor. split; auto. inversion 1.
+  Qed.
+
   Lemma typing_lte {R} : forall P P' Q Q' (t : itree E R),
       typing P Q t ->
       P' ⊑ P ->

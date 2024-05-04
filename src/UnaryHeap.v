@@ -156,6 +156,11 @@ Section HeapPerms.
       + exists p; split; [| split]; intuition.
   Qed.
 
+  Lemma typing_bottom_step {R} : forall Q (t : itree E R), (exists c t' c', step t c t' c') -> typing bottom_Perms Q t.
+  Proof.
+    intros. pstep. constructor. split; auto. inversion 1.
+  Qed.
+
   Lemma typing_lte {R} : forall P P' Q Q' (t : itree E R),
       typing P Q t ->
       P' ⊑ P ->
@@ -409,12 +414,6 @@ Section HeapPerms.
     intros Hdiff. constructor; intros; destruct x, y; cbn; apply H; auto.
   Qed.
 
-  Definition read_Perms (ptr : addr) (P : Value -> Perms) : Perms :=
-    join_Perms (fun Q => exists y : Value, Q = singleton_Perms (read_perm ptr y) * P y).
-
-  Definition write_Perms (ptr : addr) (P : Value -> Perms) : Perms :=
-    join_Perms (fun Q => exists y : Value, Q = singleton_Perms (write_perm ptr y) * P y).
-
   Variant RW: Type := R | W.
 
   Definition ptr_Perms (rw : RW) (p : Value) (T : Value -> Perms) : Perms :=
@@ -428,7 +427,6 @@ Section HeapPerms.
                                              end) *
                               (T v))
     end.
-  (* TODO: do we need this? *)
 
   Program Definition eqp {A} (a a' : A) : @Perms config :=
     {|
@@ -479,6 +477,7 @@ Section HeapPerms.
     eapply Perms_downwards_closed; eauto. etransitivity. 2: apply lte_r_sep_conj_perm. eauto.
   Qed.
 
+  (*
   Lemma ReadDup p v :
     read_Perms p (eqp v) ⊑
     read_Perms p (eqp v) * read_Perms p (eqp v).
@@ -505,6 +504,7 @@ Section HeapPerms.
       + destruct H0; auto.
       + etransitivity; eauto.
   Qed.
+   *)
 
   (*
   Lemma PtrI_Read l l' (T : Value -> Perms) :
@@ -575,22 +575,28 @@ Section HeapPerms.
   Qed.
    *)
 
-  Lemma typing_load ptr (Q : Value -> Perms) :
+  Lemma typing_load rw ptr (Q : Value -> Perms) :
     typing
-      (read_Perms ptr Q)
-      (fun x => (read_Perms ptr (eqp x)) * Q x)
-      (trigger (Load (VPtr ptr))).
+      (ptr_Perms rw ptr Q)
+      (fun x => (ptr_Perms rw ptr (eqp x)) * Q x)
+      (trigger (Load ptr)).
   Proof.
     pstep. constructor 1. split.
-    - eexists {| m := _; e := false |}. do 2 eexists.
-      constructor. unfold read'. cbn. eapply read_mem_at.
-      Unshelve. apply (VNum 0).
-    - intros p' c (P & (v & ?) & Hp) Hpre t' c' Hstep. subst.
+    - destruct ptr.
+      + do 3 eexists. econstructor 4. unfold read'. reflexivity.
+        Unshelve. apply start_config.
+      + eexists {| m := _; e := false |}. do 2 eexists.
+        constructor. unfold read'. cbn. eapply read_mem_at.
+        Unshelve. apply (VNum 0).
+    - destruct ptr as [? | ptr].
+      { intros. inversion H. }
+      intros p' c (P & (v & ?) & Hp) Hpre t' c' Hstep. subst.
       destruct Hp as (p & q & Hp & Hq & Hsep & Hlte). cbn in Hp.
       inversion Hstep; subst; apply Eqdep.EqdepTheory.inj_pair2 in H1; subst.
       + split; intuition. assert (v = v0). {
           apply Hlte in Hpre. destruct Hpre as (Hpre & _). apply Hp in Hpre.
-          rewrite Hpre in H4. inversion H4. auto.
+          destruct rw; cbn in Hpre; unfold read' in *;
+            [rewrite Hpre in H4 | rewrite <- Hpre in H4]; inversion H4; auto.
         } subst. eexists. split.
         * left. pstep. constructor 2. reflexivity.
         * exists (p ** q). split; [| split]; eauto.
@@ -599,20 +605,26 @@ Section HeapPerms.
           eexists. split. eexists. reflexivity. cbn. eexists. exists top_perm.
           split; [| split; [| split]]; eauto. apply separate_top. apply sep_conj_perm_top.
       + apply Hlte in Hpre. destruct Hpre as (Hpre & _). apply Hp in Hpre.
-        rewrite Hpre in H4. inversion H4.
+        destruct rw; cbn in Hpre; unfold read' in *;
+          [rewrite Hpre in H4 | rewrite <- Hpre in H4]; inversion H4.
   Qed.
 
   Lemma typing_store_alt {R} ptr val (P Q : Value -> Perms) (r : R) :
     typing
-      (write_Perms ptr P * Q val)
-      (fun _ => write_Perms ptr Q)
-      (trigger (Store (VPtr ptr) val)).
+      (ptr_Perms W ptr P * Q val)
+      (fun _ => ptr_Perms W ptr Q)
+      (trigger (Store ptr val)).
   Proof.
   pstep. constructor 1. split.
-  - eexists {| m := _; e := false |}. do 2 eexists.
-    constructor. unfold write'. cbn.
-    rewrite write_mem_at. reflexivity. Unshelve. apply (VNum 0).
-  - intros p'' c (p' & q & (? & (val' & ?) & Hp') & Hq & Hsep'' & Hlte'') Hpre t' c' Hstep. subst.
+  - destruct ptr.
+    + do 3 eexists. econstructor 5. unfold write'. reflexivity.
+      Unshelve. apply start_config.
+    + eexists {| m := _; e := false |}. do 2 eexists.
+      constructor. unfold write'. cbn.
+      rewrite write_mem_at. reflexivity. Unshelve. apply (VNum 0).
+  - destruct ptr as [? | ptr].
+    { intros. destruct H as (? & ? & ? & _). inversion H. }
+    intros p'' c (p' & q & (? & (val' & ?) & Hp') & Hq & Hsep'' & Hlte'') Hpre t' c' Hstep. subst.
     destruct Hp' as (pw & p & Hwrite & Hp & Hsep' & Hlte'). cbn in Hwrite.
     inversion Hstep; subst; apply Eqdep.EqdepTheory.inj_pair2 in H2; subst.
     {
@@ -665,14 +677,42 @@ Section HeapPerms.
 
   Lemma typing_store {R} ptr val (P Q : Value -> @Perms config) (r : R) :
     typing
-      (write_Perms ptr P)
-      (fun _ => write_Perms ptr (eqp val))
-      (trigger (Store (VPtr ptr) val)).
+      (ptr_Perms W ptr P)
+      (fun _ => ptr_Perms W ptr (eqp val))
+      (trigger (Store ptr val)).
   Proof.
     assert (top_Perms ≡ eqp val val).
     { split; repeat intro; cbn; auto. }
     rewrite <- sep_conj_Perms_top_identity. rewrite sep_conj_Perms_commut.
     rewrite H. eapply typing_store_alt; eauto.
+  Qed.
+
+  Definition load_load_store p : itree E unit :=
+    p' <- trigger (Load p);;
+    p'' <- trigger (Load p');;
+    trigger (Store p'' (VNum 1)).
+
+  Example typing_lls p :
+    typing
+      (ptr_Perms R p (fun p' => ptr_Perms R p' (fun p'' => ptr_Perms W p'' (fun _ => top_Perms))))
+      (fun _ => top_Perms)
+      (load_load_store p).
+  Proof.
+    unfold load_load_store.
+    eapply typing_bind. apply typing_load.
+
+    intros p'. cbn.
+    eapply typing_bind. rewrite sep_conj_Perms_commut.
+    eapply typing_lte. 3: reflexivity.
+    2: { apply lte_l_sep_conj_Perms. }
+    apply typing_load.
+
+    intros p''. cbn.
+    eapply typing_lte.
+    3: { intros. apply top_Perms_is_top. }
+    2: { apply lte_r_sep_conj_Perms. }
+    eapply @typing_store with (R:=unit). 2: apply tt.
+    intros. apply top_Perms.
   Qed.
 
 End HeapPerms.
