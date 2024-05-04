@@ -718,7 +718,8 @@ Section HeapPerms.
     eapply typing_bind. apply typing_load.
 
     intros p'. cbn.
-    eapply typing_lte.
+    apply typing_lte with (P:=ptr_Perms W p' (eqp p') * eqp p p')
+                          (Q:=fun _ => ptr_Perms W p' (eqp (VNum 1)) * (eqp p p')).
     2: {
       etransitivity.
       apply sep_conj_Perms_monotone. reflexivity.
@@ -727,17 +728,18 @@ Section HeapPerms.
       apply sep_conj_Perms_monotone. 2: reflexivity.
       rewrite sep_conj_Perms_commut. apply Cast with (P:=fun p => ptr_Perms W p (eqp p')).
     }
+    2: {
+      intros.
+      rewrite sep_conj_Perms_commut.
+      etransitivity.
+      apply sep_conj_Perms_monotone. 2: reflexivity.
+      apply EqSym.
+      apply Cast with (P:=fun p => ptr_Perms W p (eqp (VNum 1))).
+    }
 
     apply typing_perm_frame.
     eapply @typing_store with (R:=unit). 2: apply tt.
     intros. apply top_Perms.
-
-    intros. cbn.
-    rewrite sep_conj_Perms_commut.
-    etransitivity.
-    apply sep_conj_Perms_monotone. 2: reflexivity.
-    apply EqSym.
-    apply Cast with (P:=fun p => ptr_Perms W p (eqp (VNum 1))).
   Qed.
 
 End HeapPerms.
