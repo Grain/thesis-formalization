@@ -687,32 +687,57 @@ Section HeapPerms.
     rewrite H. eapply typing_store_alt; eauto.
   Qed.
 
-  Definition load_load_store p : itree E unit :=
+  Definition load_store p : itree E unit :=
     p' <- trigger (Load p);;
-    p'' <- trigger (Load p');;
-    trigger (Store p'' (VNum 1)).
+    trigger (Store p' (VNum 1)).
 
-  Example typing_lls p :
+  Example typing_ls p :
     typing
-      (ptr_Perms R p (fun p' => ptr_Perms R p' (fun p'' => ptr_Perms W p'' (fun _ => top_Perms))))
+      (ptr_Perms R p (fun p' => ptr_Perms W p' (fun _ => top_Perms)))
       (fun _ => top_Perms)
-      (load_load_store p).
+      (load_store p).
   Proof.
-    unfold load_load_store.
+    unfold load_store.
     eapply typing_bind. apply typing_load.
 
     intros p'. cbn.
-    eapply typing_bind. rewrite sep_conj_Perms_commut.
-    eapply typing_lte. 3: reflexivity.
-    2: { apply lte_l_sep_conj_Perms. }
-    apply typing_load.
-
-    intros p''. cbn.
     eapply typing_lte.
     3: { intros. apply top_Perms_is_top. }
     2: { apply lte_r_sep_conj_Perms. }
     eapply @typing_store with (R:=unit). 2: apply tt.
     intros. apply top_Perms.
+  Qed.
+
+  Example typing_ls_circular p :
+    typing
+      (ptr_Perms W p (eqp p))
+      (fun _ => ptr_Perms W p (eqp (VNum 1)))
+      (load_store p).
+  Proof.
+    unfold load_store.
+    eapply typing_bind. apply typing_load.
+
+    intros p'. cbn.
+    eapply typing_lte.
+    2: {
+      etransitivity.
+      apply sep_conj_Perms_monotone. reflexivity.
+      apply EqDup.
+      rewrite sep_conj_Perms_assoc.
+      apply sep_conj_Perms_monotone. 2: reflexivity.
+      rewrite sep_conj_Perms_commut. apply Cast with (P:=fun p => ptr_Perms W p (eqp p')).
+    }
+
+    apply typing_perm_frame.
+    eapply @typing_store with (R:=unit). 2: apply tt.
+    intros. apply top_Perms.
+
+    intros. cbn.
+    rewrite sep_conj_Perms_commut.
+    etransitivity.
+    apply sep_conj_Perms_monotone. 2: reflexivity.
+    apply EqSym.
+    apply Cast with (P:=fun p => ptr_Perms W p (eqp (VNum 1))).
   Qed.
 
 End HeapPerms.
