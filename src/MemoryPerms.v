@@ -584,7 +584,7 @@ Section MemoryPerms.
 
   Definition offset (v : Value) (o : nat) : Value :=
     match v with
-    | VNum n => VNum (n + o)
+    | VNum n => VNum n (* Do nothing. offset is never used with VNums. *)
     | VPtr (blk, n) => VPtr (blk, n + o)
     end.
 
