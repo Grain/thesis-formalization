@@ -313,7 +313,7 @@ Section MemoryOps.
                end
     end.
 
-  Definition store (ptr : Value) (v : Value) : itree (sceE Si) Si :=
+  Definition store (ptr : Value) (v : Value) : itree (sceE Si) unit :=
     match ptr with
     | VNum _ => throw tt
     | VPtr ptr => s <- trigger (Modify (fun s => match write (lget s) ptr v with
@@ -322,7 +322,7 @@ Section MemoryOps.
                                             end)) ;;
                  match write (lget s) ptr v with
                  | None => throw tt
-                 | Some c => Ret (lput s c)
+                 | Some c => Ret tt
                  end
     end.
 

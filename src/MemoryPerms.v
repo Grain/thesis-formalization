@@ -1007,6 +1007,84 @@ Section MemoryPerms.
 
    *)
 
+
+  Definition load_store p : itree (sceE Si) unit :=
+    p' <- load p;;
+    store p' (VNum 1).
+
+  Definition spec : itree (sceE Ss) unit :=
+    Ret tt ;;
+    Ret tt.
+
+  Lemma load_store_typing p :
+    p :: ptr (R, 0, (ptr (W, 0, trueP))) ▷ tt ⊢
+      load_store p ⤳
+      spec :::
+      trueP ∅ p :: ptr (R, 0, (ptr (W, 0, eqp (VNum 1)))) ▷ tt.
+  Proof.
+    (* PtrE *)
+    eapply Weak; [apply TrueI | reflexivity | ].
+    rewrite sep_conj_Perms_commut.
+    eapply PtrE; eauto; intros p'.
+
+    (* Bind *)
+    eapply Bind.
+    {
+      rewrite sep_conj_Perms_top_identity.
+      (* Frame *)
+      apply Frame.
+      (* Load *)
+      apply Load.
+    }
+    {
+      intros xi [].
+      (* Weak *)
+      apply Weak with
+        (P2 := xi :: ptr (W, 0, trueP) ▷ tt * p :: ptr (R, 0, eqp xi) ▷ tt)
+        (U2 := trueP ∅ xi :: ptr (W, 0, eqp (VNum 1)) ▷ tt ∅ p :: ptr (R, 0, eqp xi) ▷ tt).
+      {
+        etransitivity. apply PermsE.
+        rewrite sep_conj_Perms_commut.
+        etransitivity. apply sep_conj_Perms_monotone. reflexivity.
+        apply sep_conj_Perms_monotone.
+        etransitivity. apply EqSym. apply EqDup.
+        reflexivity.
+        rewrite <- sep_conj_Perms_assoc.
+        etransitivity. apply sep_conj_Perms_monotone. reflexivity.
+        etransitivity. apply sep_conj_Perms_monotone. reflexivity.
+        rewrite sep_conj_Perms_commut. apply PtrI. reflexivity.
+
+        rewrite sep_conj_Perms_assoc.
+        apply sep_conj_Perms_monotone. 2: reflexivity.
+        rewrite sep_conj_Perms_commut.
+        etransitivity. apply sep_conj_Perms_monotone. apply EqSym. reflexivity.
+        apply Cast.
+      }
+      2: {
+        apply Frame.
+        apply Store.
+      }
+      {
+        clear p'. rename xi into p'.
+        intros [] [].
+
+        etransitivity. apply PermsE.
+        rewrite sep_conj_Perms_commut.
+        etransitivity. apply sep_conj_Perms_monotone. reflexivity.
+        apply PermsE.
+        rewrite sep_conj_Perms_commut.
+        rewrite <- sep_conj_Perms_assoc.
+        etransitivity. apply sep_conj_Perms_monotone. reflexivity.
+        rewrite sep_conj_Perms_commut. apply PtrI.
+
+        etransitivity. apply PermsI. reflexivity.
+      }
+    }
+
+    Unshelve. apply unit. apply tt.
+  Qed.
+
+
   (** * Array rules *)
   Lemma ArrCombine_eq A xi rw o l1 l2 (l:le l2 l1) xs1 xs2 (P : @VPermType Si Ss A) :
     eq_Perms (xi :: arr (rw, o, l1, P) ▷ append_leq l1 l2 l xs1 xs2)
