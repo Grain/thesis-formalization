@@ -112,7 +112,7 @@ Section permType.
 
   (** The ordering on permission types is just the lifting of that on Perms *)
   Definition lte_PermType {A B} (T1 T2:PermType A B): Prop :=
-    forall a b, lte_Perms (ptApp _ _ T2 a b) (ptApp _ _ T1 a b).
+    forall a b, lte_Perms (ptApp _ _ T1 a b) (ptApp _ _ T2 a b).
 
   (** Equals on PermType is just the symmetric closure of the ordering *)
   Definition eq_PermType {A B} (T1 T2:PermType A B): Prop :=
@@ -122,7 +122,7 @@ Section permType.
   Proof.
     constructor; intro; intros; intros a b.
     - reflexivity.
-    - etransitivity; [ apply H0 | apply H ].
+    - etransitivity; [ apply H | apply H0 ].
   Qed.
 
   Global Instance Equivalence_eq_PermType A B : Equivalence (@eq_PermType A B).
@@ -137,7 +137,7 @@ Section permType.
     Proper (eq_PermType ==> eq ==> eq ==> eq_Perms) (ptApp A B).
   Proof.
     intros T1 T2 eT a1 a2 ea b1 b2 eb. rewrite ea; rewrite eb.
-    destruct eT. split; [ apply H0 | apply H ].
+    destruct eT. split; [ apply H | apply H0 ].
   Qed.
 
   (** The join on permission types is just the lifting of that on Perms *)
@@ -146,33 +146,33 @@ Section permType.
 
   (** Join is an upper bound for PermType *)
   Lemma lte_join_PermType {A B} (Ts:PermType A B -> Prop) T:
-    Ts T -> lte_PermType (join_PermType Ts) T.
+    Ts T -> lte_PermType T (join_PermType Ts).
   Proof.
     intros ts_t a b. apply lte_join_Perms. exists T; split; eauto.
   Qed.
 
   (** Join is the least upper bound for PermType *)
   Lemma join_PermType_min {A B} (Ts:PermType A B -> Prop) T:
-    (forall T', Ts T' -> lte_PermType T T') ->
-    lte_PermType T (join_PermType Ts).
+    (forall T', Ts T' -> lte_PermType T' T) ->
+    lte_PermType (join_PermType Ts) T.
   Proof.
     intros lte_T_Ts a b. apply join_Perms_min. intros P [ T' [ Ts_T' P_eq ]].
     rewrite P_eq. apply (lte_T_Ts T' Ts_T' a b).
   Qed.
 
-  (** The least fixed-point permission type is defined via the standard
-  Knaster-Tarski construction as the meet of all F-closed permission types *)
+  (** The greatest fixed-point permission type is defined via the standard
+  Knaster-Tarski construction as the join of all F-consistent permission types *)
   Definition fixPT {A B} (F:PermType A B -> PermType A B)
              {prp:Proper (lte_PermType ==> lte_PermType) F} : PermType A B :=
-    join_PermType (fun T => lte_PermType (F T) T).
+    join_PermType (fun T => lte_PermType T (F T)).
 
-  (** First we prove that fixPT is itself F-closed *)
-  Lemma fixPT_F_closed {A B} (F:PermType A B -> PermType A B)
+  (** First we prove that fixPT is itself F-consistent *)
+  Lemma fixPT_F_consistent {A B} (F:PermType A B -> PermType A B)
         {prp:Proper (lte_PermType ==> lte_PermType) F} :
-    lte_PermType (F (fixPT F)) (fixPT F).
+    lte_PermType (fixPT F) (F (fixPT F)).
   Proof.
     intros a b. apply join_PermType_min. intros T' lte_FT'.
-    transitivity (F T'); [ | assumption ]. apply prp.
+    transitivity (F T'); [ assumption | ]. apply prp.
     apply lte_join_PermType. assumption.
   Qed.
 
@@ -181,8 +181,8 @@ Section permType.
         {prp:Proper (lte_PermType ==> lte_PermType) F} :
     eq_PermType (fixPT F) (F (fixPT F)).
   Proof.
-    split; [ | apply fixPT_F_closed ].
-    apply lte_join_PermType. apply prp. apply fixPT_F_closed.
+    split; [ apply fixPT_F_consistent | ].
+    apply lte_join_PermType. apply prp. apply fixPT_F_consistent.
   Qed.
 
   Class FixedPoint (G:Type -> Type) X : Type :=
