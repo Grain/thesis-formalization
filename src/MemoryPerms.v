@@ -1681,6 +1681,24 @@ Section MemoryPerms.
     eexists. split; eauto. do 2 eexists. split; eauto. split; eauto. apply H. auto.
   Qed.
 
+  Lemma MuDup A G X `{FixedPoint G X} (F : @PermType Si Ss A X -> @PermType Si Ss A (G X))
+        {prp : Proper (lte_PermType ==> lte_PermType) F}
+        xi xs :
+    xi :: mu F ▷ xs ⊑ xi :: mu F ▷ xs * xi :: mu F ▷ xs.
+  Proof.
+  (*   eapply Proper_eq_Perms_lte_Perms; [ | reflexivity | ]. *)
+  (*   - apply Proper_eq_PermType_ptApp; [ apply mu_fixed_point | | ]; reflexivity. *)
+  (*   - simpl. reflexivity. *)
+    (* Qed. *)
+  Abort.
+
+
+  Lemma dup xi xs rw isNat v :
+    xi :: circular_list_perm rw {n : nat & unit} isNat v ▷ xs ⊑
+      xi :: circular_list_perm rw _ isNat v ▷ xs * xi :: circular_list_perm rw _ isNat v ▷ xs.
+  Proof.
+  Admitted.
+
   Definition nth_i (n : nat) (p : Value) : itree (sceE Si) Value :=
     iter (fun '(v, p) =>
             i <- getNum v;;
@@ -1710,11 +1728,11 @@ Section MemoryPerms.
             end)
       (existT _ 0 tt, l).
 
-  Lemma nth_typing xi xs (T : VPermType Rs) n :
-    xi :: circular_list_perm R Rs T xi ▷ xs ⊢
+  Lemma nth_typing xi xs n :
+    xi :: circular_list_perm R Rs isNat xi ▷ xs ⊢
       nth_i n xi ⤳
       nth_s n xs :::
-      T.
+      isNat.
   Proof.
     unfold nth_i, nth_s.
 
@@ -1722,19 +1740,27 @@ Section MemoryPerms.
     eapply Weak; [apply EqRefl with (xi := VNum 0) | reflexivity |].
     rewrite sep_conj_Perms_commut.
     eapply Weak with (P2 := VNum 0 :: isNat ▷ (existT _ 0 tt) *
-                              xi :: circular_list_perm R Rs T xi ▷ xs); [| reflexivity |].
+                              xi :: circular_list_perm R Rs isNat xi ▷ xs); [| reflexivity |].
     apply sep_conj_Perms_monotone; [| reflexivity].
     (* not sure why i can't just apply ExI, but this works *)
     etransitivity. 2: eapply ExI. reflexivity.
+
+    (* Duplicate the permission on xi and xs for later *)
+    eapply Weak; [| reflexivity |].
+    apply sep_conj_Perms_monotone; [reflexivity |].
+    etransitivity. apply dup. apply PermsI.
+
+    (* Pair the two permissions together for Iter *)
     eapply Weak; [apply ProdI | reflexivity |].
 
     (* Apply Iter, start looking at the loop bodies *)
     apply PermTypeProofs.Iter.
-    intros [ii p] [is l].
+    intros [ii p] [[i []] l].
+    (* ii and i both represent the nat i *)
+    (* p and l both represent the list *)
     eapply Weak; [apply ProdE | reflexivity |]. unfold fst, snd.
     eapply Weak; [| reflexivity |].
     apply sep_conj_Perms_monotone; [apply ExE | reflexivity].
-    destruct is as [is []].
 
     eapply Bind.
     {
@@ -1742,25 +1768,43 @@ Section MemoryPerms.
       apply GetNum.
     }
 
-    clear ii. intros ii []. unfold projT1.
+    (* we finished using ii in getNum, so we can replace it with the new nat value i' now. we have the equality permission i = i' *)
+    clear ii. intros i' []. unfold projT1.
     eapply Weak; [apply PermsE | reflexivity |].
-    (* need to save this eqp for the second case of the if *)
+    rewrite sep_conj_Perms_commut.
+
+    (* make a copy of the eqp relating i and i' *)
+    eapply Weak; [ | reflexivity |].
+    apply sep_conj_Perms_monotone; [reflexivity |].
+    apply EqDup.
+    rewrite sep_conj_Perms_assoc.
+
+    (* Relate the values in the if condition *)
     eapply Weak; [| reflexivity |].
-    apply sep_conj_Perms_monotone; [| reflexivity].
+    apply sep_conj_Perms_monotone; [reflexivity |].
     apply EqCtx with (f := fun i => i =? n).
 
-    rewrite sep_conj_Perms_commut.
     apply If.
-    (* we are done with recursion *)
     {
-      clear ii n is.
+      (* we are done with recursion. return the front of the list *)
+
+      (* drop the permission for i and i' *)
+      eapply Weak; [| reflexivity |].
+      apply lte_l_sep_conj_Perms.
+      clear i i' n.
+
+      (* drop the permission for xi and xs *)
+      eapply Weak; [| reflexivity |].
+      etransitivity. apply PermsE.
+      apply lte_l_sep_conj_Perms.
 
       eapply Weak; [apply MuUnfold | reflexivity |].
-      eapply Weak; [apply TrueI with (xi := tt) | reflexivity |]. rewrite sep_conj_Perms_commut.
+      eapply Weak; [apply TrueI with (xi := tt) | reflexivity |].
+      rewrite sep_conj_Perms_commut.
       apply OrE.
-      (* we are at the base case of the ne list *)
       {
-        intros [[is []] []].
+        (* we are at the base case of the ne list *)
+        intros [[i []] []].
         eapply Weak; [apply lte_r_sep_conj_Perms | reflexivity |].
         eapply Weak; [apply StarE | reflexivity |]. unfold fst.
         rewrite sep_conj_Perms_commut.
@@ -1788,9 +1832,9 @@ Section MemoryPerms.
           apply Ret_.
         }
       }
-      (* not the base case of ne list. Exactly the same *)
       {
-        intros [[is []] ls].
+        (* not the base case of ne list. Same as the prev case *)
+        intros [[i []] l'].
         eapply Weak; [apply lte_r_sep_conj_Perms | reflexivity |].
         eapply Weak; [apply StarE | reflexivity |]. unfold fst.
         rewrite sep_conj_Perms_commut.
@@ -1819,47 +1863,153 @@ Section MemoryPerms.
         }
       }
     }
-    (* keep recursing *)
     {
+      (* keep recursing. *)
       clear n.
-      eapply Weak; [apply MuUnfold | reflexivity |].
-      eapply Weak; [apply TrueI with (xi := tt) | reflexivity |]. rewrite sep_conj_Perms_commut.
+
+      (* unfold the recursive type *)
+      eapply Weak; [| reflexivity |].
+      apply sep_conj_Perms_monotone; [| reflexivity].
+      etransitivity. apply PermsE.
+      apply sep_conj_Perms_monotone; [| reflexivity].
+      apply MuUnfold.
+      rewrite <- sep_conj_Perms_assoc.
+      rewrite sep_conj_Perms_commut.
+
       apply OrE.
-      (* we are at the base case of the ne list *)
       {
+        (* we are at the base case of the ne list *)
         intros [[is' []] []].
-        eapply Weak; [apply lte_r_sep_conj_Perms | reflexivity |].
-        eapply Weak; [apply StarE | reflexivity |]. unfold snd.
+
+        rewrite sep_conj_Perms_commut.
+        eapply Weak; [| reflexivity |].
+        apply sep_conj_Perms_monotone; [| reflexivity].
+        apply StarE.
+
+        rewrite <- sep_conj_Perms_assoc.
         eapply Weak; [apply lte_r_sep_conj_Perms | reflexivity |].
         eapply Bind.
         {
+          apply Frame.
           eapply Weak; [apply PtrOff with (o2:=1) | reflexivity |]. lia.
           apply Load.
         }
         {
+          (* Drop the perm on p + 1 *)
           intros xi' [].
           eapply Weak; [apply PermsE | reflexivity |].
           eapply Weak; [| reflexivity |].
-          {
-            apply sep_conj_Perms_monotone; [| reflexivity].
-            etransitivity.
-            apply PermsE.
-            apply lte_l_sep_conj_Perms.
-          }
-          eapply Weak; [apply Cast | reflexivity |]. clear v.
-          eapply Weak; [apply SumI2 | reflexivity |].
+          apply sep_conj_Perms_monotone; [apply PermsE | reflexivity].
+          eapply Weak; [| reflexivity |].
+          rewrite <- sep_conj_Perms_assoc.
+          apply sep_conj_Perms_monotone; [reflexivity |].
+          apply lte_r_sep_conj_Perms.
+
+          (* duplicate the perm relating xi and xs again *)
+          eapply Weak; [| reflexivity |].
+          apply sep_conj_Perms_monotone; [reflexivity |].
+          apply sep_conj_Perms_monotone; [| reflexivity].
+          apply dup.
+
+          (* get a permission on xi' *)
+          do 2 rewrite sep_conj_Perms_assoc.
+          eapply Weak; [| reflexivity |].
+          apply sep_conj_Perms_monotone; [| reflexivity].
+          apply sep_conj_Perms_monotone; [| reflexivity].
+          apply Cast.
+
+          (* put the xi permission back together *)
+          rewrite sep_conj_Perms_commut.
+          eapply Weak; [| reflexivity |].
+          apply sep_conj_Perms_monotone; [reflexivity |].
+          apply PermsI.
+
+          (* recreate isNat perm *)
+          eapply Weak; [| reflexivity |].
+          apply sep_conj_Perms_monotone with (P := (VNum (i' + 1)) :: isNat ▷ existT _ (i + 1) tt) ; [| reflexivity].
+          etransitivity. 2: eapply ExI.
+          apply EqCtx with (f := fun i => VNum (i + 1)).
+
+          (* recreate prod perm *)
+          eapply Weak; [| reflexivity |].
+          apply ProdI.
+
+          (* recreate sum perm *)
+          eapply Weak; [| reflexivity |].
+          apply SumI1.
           apply Ret_.
         }
       }
+      {
+        (* we are not at the base case of the ne list. *)
+        intros [[is' []] l'].
 
+        rewrite sep_conj_Perms_commut.
+        eapply Weak; [| reflexivity |].
+        apply sep_conj_Perms_monotone; [| reflexivity].
+        apply StarE.
 
+        (* drop the perm on p *)
+        rewrite <- sep_conj_Perms_assoc.
+        eapply Weak; [apply lte_r_sep_conj_Perms | reflexivity |].
+
+        (* get the perm on the value p + 1 points to *)
+        rewrite sep_conj_Perms_commut.
+        apply PtrE. intros v.
+
+        eapply Bind.
+        {
+          rewrite (sep_conj_Perms_commut _ (p :: ptr (R, 1, eqp v) ▷ tt)).
+          rewrite <- sep_conj_Perms_assoc.
+          apply Frame.
+          eapply Weak; [apply PtrOff with (o2:=1) | reflexivity |]. lia.
+          apply Load.
+        }
+        {
+          (* Drop the perm on p + 1 *)
+          intros xi' []. unfold snd.
+          eapply Weak; [apply PermsE | reflexivity |].
+          eapply Weak; [| reflexivity |].
+          apply sep_conj_Perms_monotone; [apply PermsE | reflexivity].
+          eapply Weak; [| reflexivity |].
+          rewrite <- sep_conj_Perms_assoc.
+          apply sep_conj_Perms_monotone; [reflexivity |].
+          apply lte_r_sep_conj_Perms.
+
+          (* get a permission on xi' *)
+          eapply Weak; [| reflexivity |].
+          apply sep_conj_Perms_monotone; [reflexivity |].
+          rewrite sep_conj_Perms_commut.
+          reflexivity.
+          do 2 rewrite sep_conj_Perms_assoc.
+          eapply Weak; [| reflexivity |].
+          apply sep_conj_Perms_monotone; [| reflexivity].
+          apply sep_conj_Perms_monotone; [| reflexivity].
+          apply Cast.
+
+          (* put the xi permission back together *)
+          rewrite sep_conj_Perms_commut.
+          eapply Weak; [| reflexivity |].
+          apply sep_conj_Perms_monotone; [reflexivity |].
+          apply PermsI.
+
+          (* recreate isNat perm *)
+          eapply Weak; [| reflexivity |].
+          apply sep_conj_Perms_monotone with (P := (VNum (i' + 1)) :: isNat ▷ existT _ (i + 1) tt) ; [| reflexivity].
+          etransitivity. 2: eapply ExI.
+          apply EqCtx with (f := fun i => VNum (i + 1)).
+
+          (* recreate prod perm *)
+          eapply Weak; [| reflexivity |].
+          apply ProdI.
+
+          (* recreate sum perm *)
+          eapply Weak; [| reflexivity |].
+          apply SumI1.
+          apply Ret_.
+        }
+      }
     }
-
-    eapply Weak; [| reflexivity |].
-    apply sep_conj_Perms_monotone; [| reflexivity].
-    apply
-
-    apply OrE.
   Qed.
 
   (*
