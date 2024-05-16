@@ -141,18 +141,18 @@ Section permType.
   Qed.
 
   (** The join on permission types is just the lifting of that on Perms *)
-  Definition join_PermType {A B} (Ts:PermType A B -> Prop) : PermType A B :=
+  Definition join_PermType {A B} (Ts : PermType A B -> Prop) : PermType A B :=
     {| ptApp := fun a b => join_Perms (fun P => exists T, Ts T /\ P = (a :: T ▷ b)) |}.
 
   (** Join is an upper bound for PermType *)
-  Lemma lte_join_PermType {A B} (Ts:PermType A B -> Prop) T:
+  Lemma lte_join_PermType {A B} (Ts : PermType A B -> Prop) T:
     Ts T -> lte_PermType T (join_PermType Ts).
   Proof.
     intros ts_t a b. apply lte_join_Perms. exists T; split; eauto.
   Qed.
 
   (** Join is the least upper bound for PermType *)
-  Lemma join_PermType_min {A B} (Ts:PermType A B -> Prop) T:
+  Lemma join_PermType_min {A B} (Ts : PermType A B -> Prop) T:
     (forall T', Ts T' -> lte_PermType T' T) ->
     lte_PermType (join_PermType Ts) T.
   Proof.
@@ -162,13 +162,13 @@ Section permType.
 
   (** The greatest fixed-point permission type is defined via the standard
   Knaster-Tarski construction as the join of all F-consistent permission types *)
-  Definition fixPT {A B} (F:PermType A B -> PermType A B)
-             {prp:Proper (lte_PermType ==> lte_PermType) F} : PermType A B :=
+  Definition fixPT {A B} (F : PermType A B -> PermType A B)
+             {prp : Proper (lte_PermType ==> lte_PermType) F} : PermType A B :=
     join_PermType (fun T => lte_PermType T (F T)).
 
   (** First we prove that fixPT is itself F-consistent *)
-  Lemma fixPT_F_consistent {A B} (F:PermType A B -> PermType A B)
-        {prp:Proper (lte_PermType ==> lte_PermType) F} :
+  Lemma fixPT_F_consistent {A B} (F : PermType A B -> PermType A B)
+    {prp : Proper (lte_PermType ==> lte_PermType) F} :
     lte_PermType (fixPT F) (F (fixPT F)).
   Proof.
     intros a b. apply join_PermType_min. intros T' lte_FT'.
@@ -177,25 +177,26 @@ Section permType.
   Qed.
 
   (** Then we prove that fixPT is a fixed-point *)
-  Lemma fixPT_fixed_point {A B} (F:PermType A B -> PermType A B)
-        {prp:Proper (lte_PermType ==> lte_PermType) F} :
+  Lemma fixPT_fixed_point {A B} (F : PermType A B -> PermType A B)
+    {prp : Proper (lte_PermType ==> lte_PermType) F} :
     eq_PermType (fixPT F) (F (fixPT F)).
   Proof.
     split; [ apply fixPT_F_consistent | ].
     apply lte_join_PermType. apply prp. apply fixPT_F_consistent.
   Qed.
 
-  Class FixedPoint (G:Type -> Type) X : Type :=
+  Class FixedPoint (G : Type -> Type) X : Type :=
     { foldFP : G X -> X;
       unfoldFP : X -> G X;
       foldUnfold : forall gx, unfoldFP (foldFP gx) = gx;
       unfoldFold : forall x, foldFP (unfoldFP x) = x; }.
-  Definition unmaprPT {A B C} (f:B -> C) (T:PermType A C) : PermType A B :=
+
+  Definition unmaprPT {A B C} (f : B -> C) (T : PermType A C) : PermType A B :=
     {| ptApp := fun a b => a :: T ▷ (f b) |}.
 
   Program Definition mu {A G X} `{FixedPoint G X}
-             (F:PermType A X -> PermType A (G X))
-             {prp:Proper (lte_PermType ==> lte_PermType) F}
+             (F : PermType A X -> PermType A (G X))
+             {prp : Proper (lte_PermType ==> lte_PermType) F}
     : PermType A X :=
     @fixPT A X (fun T => unmaprPT unfoldFP (F T)) _.
   Next Obligation.
@@ -203,16 +204,16 @@ Section permType.
   Defined.
 
   Lemma mu_fixed_point {A G X} `{FixedPoint G X}
-        (F:PermType A X -> PermType A (G X))
-        {prp:Proper (lte_PermType ==> lte_PermType) F} :
+        (F : PermType A X -> PermType A (G X))
+        {prp : Proper (lte_PermType ==> lte_PermType) F} :
     eq_PermType (mu F) (unmaprPT unfoldFP (F (mu F))).
   Proof.
     apply (fixPT_fixed_point (fun T : PermType A X => unmaprPT unfoldFP (F T))).
   Qed.
 
   Lemma mu_fixed_point' {A G X} `{FixedPoint G X}
-        (F:PermType A X -> PermType A (G X))
-        {prp:Proper (lte_PermType ==> lte_PermType) F} :
+        (F : PermType A X -> PermType A (G X))
+        {prp : Proper (lte_PermType ==> lte_PermType) F} :
     lte_PermType (unmaprPT unfoldFP (F (mu F))) (mu F).
   Proof.
     apply (fixPT_fixed_point (fun T : PermType A X => unmaprPT unfoldFP (F T))).

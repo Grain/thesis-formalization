@@ -278,7 +278,7 @@ Section Rules.
     (* FIXME: why can't we just rewrite with mu_fixed_point here? *)
     eapply Proper_eq_Perms_lte_Perms; [ | reflexivity | ].
     2: { apply Proper_eq_PermType_ptApp; [ apply mu_fixed_point | | ]; reflexivity. }
-    simpl. rewrite foldUnfold. reflexivity.
+    cbn. rewrite foldUnfold. reflexivity.
   Qed.
 
   Lemma MuUnfold A G X `{FixedPoint G X} (F : @PermType Si Ss A X -> @PermType Si Ss A (G X))

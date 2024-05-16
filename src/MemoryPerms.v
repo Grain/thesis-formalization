@@ -24,7 +24,8 @@ From Heapster Require Import
 
 From ITree Require Import
      ITree
-     Eq.Eqit.
+     Eq.Eqit
+     Basics.
 
 From Paco Require Import
      paco.
@@ -1637,6 +1638,250 @@ Section MemoryPerms.
       repeat intro. eapply mu_fixed_point in H; auto.
       Unshelve. all: apply reach_perm_proper.
   Qed.
+
+  Section foo.
+    Definition Rs := {_ : nat & unit}.
+
+    Inductive nelist (A : Type) :=
+    | nenil : A -> nelist A
+    | necons : A -> nelist A -> nelist A
+    .
+    Definition mu_nelist A := fun R => sum (A * unit) (A * R).
+
+
+    Global Program Instance fixed_point_list A : FixedPoint (mu_nelist A) (nelist A)
+      :=
+      {
+        foldFP := fun s => match s with
+                        | inl (h, _) => nenil A h
+                        | inr (h, t) => (necons A h t)
+                        end;
+        unfoldFP := fun l => match l with
+                          | nenil _ h => inl (h, tt)
+                          | necons _ h t => inr _ (h, t)
+                          end;
+      }.
+    Next Obligation.
+      destruct gx; auto.
+      - destruct p. destruct u. reflexivity.
+      - destruct p. reflexivity.
+    Defined.
+    Next Obligation.
+      destruct x; auto.
+    Defined.
+
+
+  Program Definition circular_list_perm rw A (T : VPermType A) (p : Value) : VPermType (nelist A) :=
+    @mu _ _ _ (mu_nelist A) _ (fixed_point_list _) (fun U => or (ptr (rw, 0, T) ⋆ ptr (rw, 1, (eqp p))) (ptr (rw, 0, T) ⋆ ptr (rw, 1, U))) _.
+  Next Obligation.
+    repeat intro. cbn. induction b; cbn in *; auto.
+    destruct H0 as (? & ? & ? & ? & ? & ?). exists x0, x1. split; [| split]; auto.
+    clear H0. unfold ptr_Perms in *. destruct (offset a 1); auto.
+    destruct H1. destruct H0 as ((? & ?) & ?). subst. destruct H1 as (? & ? & ? & ? & ?).
+    eexists. split; eauto. do 2 eexists. split; eauto. split; eauto. apply H. auto.
+  Qed.
+
+  Definition nth_i (n : nat) (p : Value) : itree (sceE Si) Value :=
+    iter (fun '(v, p) =>
+            i <- getNum v;;
+            (if (i =? n)
+             then v <- load p;;
+                  Ret (inr v)
+             else p' <- load (offset p 1);;
+                  Ret (inl (VNum (i + 1), p'))))
+      (VNum 0, p).
+
+  Definition nth_s (n : nat) (l : nelist Rs) : itree (sceE Ss) Rs :=
+    iter (fun '(i, l') =>
+            match i with
+            | existT _ i _ =>
+                Ret tt;;
+                if (i =? n)
+                then (* return the front element *)
+                  sum_rect (fun _ => itree (sceE Ss) (Rs * nelist Rs + Rs))
+                    (fun '(h, _) => Ret tt;; Ret (inr h))
+                    (fun '(h, t) => Ret tt;; Ret (inr h))
+                    (unfoldFP l')
+                else  (* continue recursing *)
+                  sum_rect (fun _ => itree (sceE Ss) (Rs * nelist Rs + Rs))
+                    (fun '(h, _) => (Ret (inl (existT _ (i + 1) tt, l))))
+                    (fun '(h, t) => (Ret (inl (existT _ (i + 1) tt, t))))
+                    (unfoldFP l')
+            end)
+      (existT _ 0 tt, l).
+
+  Lemma nth_typing xi xs (T : VPermType Rs) n :
+    xi :: circular_list_perm R Rs T xi ▷ xs ⊢
+      nth_i n xi ⤳
+      nth_s n xs :::
+      T.
+  Proof.
+    unfold nth_i, nth_s.
+
+    (* create the isNat permission so we can use Iter *)
+    eapply Weak; [apply EqRefl with (xi := VNum 0) | reflexivity |].
+    rewrite sep_conj_Perms_commut.
+    eapply Weak with (P2 := VNum 0 :: isNat ▷ (existT _ 0 tt) *
+                              xi :: circular_list_perm R Rs T xi ▷ xs); [| reflexivity |].
+    apply sep_conj_Perms_monotone; [| reflexivity].
+    (* not sure why i can't just apply ExI, but this works *)
+    etransitivity. 2: eapply ExI. reflexivity.
+    eapply Weak; [apply ProdI | reflexivity |].
+
+    (* Apply Iter, start looking at the loop bodies *)
+    apply PermTypeProofs.Iter.
+    intros [ii p] [is l].
+    eapply Weak; [apply ProdE | reflexivity |]. unfold fst, snd.
+    eapply Weak; [| reflexivity |].
+    apply sep_conj_Perms_monotone; [apply ExE | reflexivity].
+    destruct is as [is []].
+
+    eapply Bind.
+    {
+      apply Frame.
+      apply GetNum.
+    }
+
+    clear ii. intros ii []. unfold projT1.
+    eapply Weak; [apply PermsE | reflexivity |].
+    eapply Weak; [| reflexivity |].
+    apply sep_conj_Perms_monotone; [| reflexivity].
+    apply EqCtx with (f := fun i => i =? n).
+
+    rewrite sep_conj_Perms_commut.
+    apply If.
+    (* we are done with recursion *)
+    {
+      clear ii n is.
+
+      eapply Weak; [apply MuUnfold | reflexivity |].
+      eapply Weak; [apply TrueI with (xi := tt) | reflexivity |]. rewrite sep_conj_Perms_commut.
+      apply OrE.
+      (* we are at the base case of the ne list *)
+      {
+        intros [[is []] []].
+        eapply Weak; [apply lte_r_sep_conj_Perms | reflexivity |].
+        eapply Weak; [apply StarE | reflexivity |]. unfold fst.
+        rewrite sep_conj_Perms_commut.
+        apply PtrE.
+        intros v.
+        rewrite <- sep_conj_Perms_assoc.
+        eapply Weak; [apply lte_r_sep_conj_Perms | reflexivity |].
+        eapply Bind.
+        {
+          apply Frame.
+          apply Load.
+        }
+        {
+          intros xi' [].
+          eapply Weak; [apply PermsE | reflexivity |].
+          eapply Weak; [| reflexivity |].
+          {
+            apply sep_conj_Perms_monotone; [| reflexivity].
+            etransitivity.
+            apply PermsE.
+            apply lte_l_sep_conj_Perms.
+          }
+          eapply Weak; [apply Cast | reflexivity |]. clear v.
+          eapply Weak; [apply SumI2 | reflexivity |].
+          apply Ret_.
+        }
+      }
+      (* not the base case of ne list. Exactly the same *)
+      {
+        intros [[is []] ls].
+        eapply Weak; [apply lte_r_sep_conj_Perms | reflexivity |].
+        eapply Weak; [apply StarE | reflexivity |]. unfold fst.
+        rewrite sep_conj_Perms_commut.
+        apply PtrE.
+        intros v.
+        rewrite <- sep_conj_Perms_assoc.
+        eapply Weak; [apply lte_r_sep_conj_Perms | reflexivity |].
+        eapply Bind.
+        {
+          apply Frame.
+          apply Load.
+        }
+        {
+          intros xi' [].
+          eapply Weak; [apply PermsE | reflexivity |].
+          eapply Weak; [| reflexivity |].
+          {
+            apply sep_conj_Perms_monotone; [| reflexivity].
+            etransitivity.
+            apply PermsE.
+            apply lte_l_sep_conj_Perms.
+          }
+          eapply Weak; [apply Cast | reflexivity |]. clear v.
+          eapply Weak; [apply SumI2 | reflexivity |].
+          apply Ret_.
+        }
+      }
+    }
+    (* keep recursing *)
+
+
+    eapply Weak; [| reflexivity |].
+    apply sep_conj_Perms_monotone; [| reflexivity].
+    apply
+
+    apply OrE.
+  Qed.
+
+  (*
+  n = 0;
+  while (v != NULL) {
+        v = *(v + 1);
+        n++;
+  }
+   *)
+  Definition ex3i (v : Value) : itree (sceE Si) Value :=
+    iter (fun '(n, v) => b <- isNull v;;
+                      if (b : bool)
+                      then Ret (inr (VNum n)) (* v == NULL *)
+                      else v' <- load (offset v 1);; (* continue with *(v + 1) *)
+                           Ret (inl (n + 1, v')))
+      (0, v).
+
+Definition ex3s {A} (l : list A) : itree (sceE Ss) (sigT (fun _ : nat => unit)) :=
+  iter (fun '(n, l) =>
+          sum_rect (fun _ => itree (sceE Ss) (((sigT (fun _ : nat => unit)) * list A) +
+                                             (sigT (fun _ : nat => unit))))
+            (fun _ : unit => Ret (inr n))
+            (fun '(h, t) => Ret (inl (existT _ (projT1 n + 1) tt, t)))
+            (unfoldFP l))
+    (existT _ 0 tt, l).
+
+Lemma ex3_typing A xi xs (T : VPermType A) :
+  xi :: list_perm R _ T ▷ xs ⊢
+    ex3i xi ⤳
+    ex3s xs :::
+    trueP.
+Proof.
+  eapply Weak with (P2 := xi :: list_perm R _ T ▷ xs *
+                          0 :: ex (n oftype nat) eqp n ▷ (existT _ 0 tt)
+                   ); [| reflexivity |].
+  {
+    etransitivity. apply EqRefl.
+    eapply sep_conj_Perms_monotone; [reflexivity |].
+    apply ExI.
+  }
+  eapply Weak; [| reflexivity |].
+  rewrite sep_conj_Perms_commut.
+  apply ProdI.
+  eapply Iter. clear xi xs.
+  intros [ni xi] [ns xs].
+  eapply Weak; [| reflexivity |].
+  apply ProdE.
+
+  eapply Weak; [| reflexivity |].
+  eapply sep_conj_Perms_monotone. reflexivity.
+  { apply MuUnfold. }
+  eapply OrE.
+  - intros []. admit.
+  - intros [a ys]. admit.
+Abort.
+
 
 End MemoryPerms.
 
