@@ -1704,8 +1704,8 @@ Section MemoryPerms.
                     (unfoldFP l')
                 else  (* continue recursing *)
                   sum_rect (fun _ => itree (sceE Ss) (Rs * nelist Rs + Rs))
-                    (fun '(h, _) => (Ret (inl (existT _ (i + 1) tt, l))))
-                    (fun '(h, t) => (Ret (inl (existT _ (i + 1) tt, t))))
+                    (fun '(h, _) => Ret tt;; Ret (inl (existT _ (i + 1) tt, l)))
+                    (fun '(h, t) => Ret tt;; Ret (inl (existT _ (i + 1) tt, t)))
                     (unfoldFP l')
             end)
       (existT _ 0 tt, l).
@@ -1744,6 +1744,7 @@ Section MemoryPerms.
 
     clear ii. intros ii []. unfold projT1.
     eapply Weak; [apply PermsE | reflexivity |].
+    (* need to save this eqp for the second case of the if *)
     eapply Weak; [| reflexivity |].
     apply sep_conj_Perms_monotone; [| reflexivity].
     apply EqCtx with (f := fun i => i =? n).
@@ -1819,7 +1820,40 @@ Section MemoryPerms.
       }
     }
     (* keep recursing *)
+    {
+      clear n.
+      eapply Weak; [apply MuUnfold | reflexivity |].
+      eapply Weak; [apply TrueI with (xi := tt) | reflexivity |]. rewrite sep_conj_Perms_commut.
+      apply OrE.
+      (* we are at the base case of the ne list *)
+      {
+        intros [[is' []] []].
+        eapply Weak; [apply lte_r_sep_conj_Perms | reflexivity |].
+        eapply Weak; [apply StarE | reflexivity |]. unfold snd.
+        eapply Weak; [apply lte_r_sep_conj_Perms | reflexivity |].
+        eapply Bind.
+        {
+          eapply Weak; [apply PtrOff with (o2:=1) | reflexivity |]. lia.
+          apply Load.
+        }
+        {
+          intros xi' [].
+          eapply Weak; [apply PermsE | reflexivity |].
+          eapply Weak; [| reflexivity |].
+          {
+            apply sep_conj_Perms_monotone; [| reflexivity].
+            etransitivity.
+            apply PermsE.
+            apply lte_l_sep_conj_Perms.
+          }
+          eapply Weak; [apply Cast | reflexivity |]. clear v.
+          eapply Weak; [apply SumI2 | reflexivity |].
+          apply Ret_.
+        }
+      }
 
+
+    }
 
     eapply Weak; [| reflexivity |].
     apply sep_conj_Perms_monotone; [| reflexivity].
