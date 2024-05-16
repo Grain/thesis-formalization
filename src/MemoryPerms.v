@@ -25,6 +25,7 @@ From Heapster Require Import
 From ITree Require Import
      ITree
      Eq.Eqit
+     Eq.EqAxiom
      Basics.
 
 From Paco Require Import
@@ -1639,7 +1640,7 @@ Section MemoryPerms.
       Unshelve. all: apply reach_perm_proper.
   Qed.
 
-  Section foo.
+  Section example.
     Definition Rs := {_ : nat & unit}.
 
     Inductive nelist (A : Type) :=
@@ -1682,21 +1683,48 @@ Section MemoryPerms.
   Qed.
 
   Lemma MuDup A G X `{FixedPoint G X} (F : @PermType Si Ss A X -> @PermType Si Ss A (G X))
-        {prp : Proper (lte_PermType ==> lte_PermType) F}
-        xi xs :
+    {prp : Proper (lte_PermType ==> lte_PermType) F}
+    (Hdup : forall T x y,
+        x :: (F T) ▷ y ⊑ x :: (F T) ▷ y * x :: (F T) ▷ y)
+    xi xs :
     xi :: mu F ▷ xs ⊑ xi :: mu F ▷ xs * xi :: mu F ▷ xs.
   Proof.
-  (*   eapply Proper_eq_Perms_lte_Perms; [ | reflexivity | ]. *)
-  (*   - apply Proper_eq_PermType_ptApp; [ apply mu_fixed_point | | ]; reflexivity. *)
-  (*   - simpl. reflexivity. *)
-    (* Qed. *)
+    etransitivity. apply MuUnfold.
+    etransitivity. apply Hdup.
+    apply sep_conj_Perms_monotone; rewrite <- (unfoldFold xs) at 2; apply MuFold.
+  Qed.
+
+
+
+  Lemma dup xi xs isNat :
+    xi :: list_perm R {n : nat & unit} isNat ▷ xs ⊑
+      xi :: list_perm R _ isNat ▷ xs * xi :: list_perm R _ isNat ▷ xs.
+  Proof.
+    repeat intro.
+    exists p, p. split; [| split]; auto.
+    cbn in *.
+    unfold lte_PermType in H.
+    destruct H as (? & ((? & ?) & ?)). destruct H. subst.
+    specialize (H xi xs).
+    cbn in H.
+    destruct xs; cbn in *.
+    -
   Abort.
 
-
-  Lemma dup xi xs rw isNat v :
-    xi :: circular_list_perm rw {n : nat & unit} isNat v ▷ xs ⊑
-      xi :: circular_list_perm rw _ isNat v ▷ xs * xi :: circular_list_perm rw _ isNat v ▷ xs.
+  Lemma dup xi xs isNat v :
+    xi :: circular_list_perm R Rs isNat v ▷ xs ⊑
+      xi :: circular_list_perm R _ isNat v ▷ xs * xi :: circular_list_perm R _ isNat v ▷ xs.
   Proof.
+    repeat intro.
+    exists p, p. split; [| split]; auto.
+
+    cbn in H.
+    destruct H as (? & ((? & ?) & ?)).
+    destruct H. subst.
+
+    (* apply MuDup. *)
+    (* intros. *)
+    (* cbn. *)
   Admitted.
 
   Definition nth_i (n : nat) (p : Value) : itree (sceE Si) Value :=
@@ -2020,52 +2048,205 @@ Section MemoryPerms.
   }
    *)
   Definition ex3i (v : Value) : itree (sceE Si) Value :=
-    iter (fun '(n, v) => b <- isNull v;;
+    iter (fun '(v, p) => n <- getNum v;;
+                      b <- isNull p;;
                       if (b : bool)
                       then Ret (inr (VNum n)) (* v == NULL *)
-                      else v' <- load (offset v 1);; (* continue with *(v + 1) *)
-                           Ret (inl (n + 1, v')))
-      (0, v).
+                      else v' <- load (offset p 1);; (* continue with *(v + 1) *)
+                           Ret (inl (VNum (n + 1), v')))
+      (VNum 0, v).
 
-Definition ex3s {A} (l : list A) : itree (sceE Ss) (sigT (fun _ : nat => unit)) :=
-  iter (fun '(n, l) =>
-          sum_rect (fun _ => itree (sceE Ss) (((sigT (fun _ : nat => unit)) * list A) +
-                                             (sigT (fun _ : nat => unit))))
-            (fun _ : unit => Ret (inr n))
-            (fun '(h, t) => Ret (inl (existT _ (projT1 n + 1) tt, t)))
-            (unfoldFP l))
-    (existT _ 0 tt, l).
+  Definition tb := true.
+  Definition fb := false.
 
-Lemma ex3_typing A xi xs (T : VPermType A) :
-  xi :: list_perm R _ T ▷ xs ⊢
-    ex3i xi ⤳
-    ex3s xs :::
-    trueP.
-Proof.
-  eapply Weak with (P2 := xi :: list_perm R _ T ▷ xs *
-                          0 :: ex (n oftype nat) eqp n ▷ (existT _ 0 tt)
-                   ); [| reflexivity |].
-  {
-    etransitivity. apply EqRefl.
-    eapply sep_conj_Perms_monotone; [reflexivity |].
-    apply ExI.
-  }
-  eapply Weak; [| reflexivity |].
-  rewrite sep_conj_Perms_commut.
-  apply ProdI.
-  eapply Iter. clear xi xs.
-  intros [ni xi] [ns xs].
-  eapply Weak; [| reflexivity |].
-  apply ProdE.
+  Definition ex3s {A} (l : list A) : itree (sceE Ss) Rs :=
+    iter (fun '(n, l) =>
+            sum_rect (fun _ => itree (sceE Ss) (((sigT (fun _ : nat => unit)) * list A) +
+                                               (sigT (fun _ : nat => unit))))
+              (fun _ : unit => Ret (inr n))
+              (fun '(h, t) => Ret (inl (existT _ (projT1 n + 1) tt, t)))
+              (unfoldFP l))
+      (existT _ 0 tt, l).
 
-  eapply Weak; [| reflexivity |].
-  eapply sep_conj_Perms_monotone. reflexivity.
-  { apply MuUnfold. }
-  eapply OrE.
-  - intros []. admit.
-  - intros [a ys]. admit.
-Abort.
+  Lemma ex3_typing A xi xs (T : VPermType A) :
+    xi :: list_perm R _ T ▷ xs ⊢
+      ex3i xi ⤳
+      ex3s xs :::
+      isNat.
+  Proof.
+    unfold ex3i, ex3s.
 
+    (* Make the isNat permission for the starting values *)
+    eapply Weak with (P2 := VNum 0 :: isNat ▷ existT _ 0 tt * xi :: list_perm R A T ▷ xs);
+      [| reflexivity |].
+    {
+      etransitivity. apply EqRefl with (xi := VNum 0).
+      rewrite sep_conj_Perms_commut.
+      eapply sep_conj_Perms_monotone; [| reflexivity].
+      etransitivity.
+      2: apply ExI. reflexivity.
+    }
+
+    (* Put the two permissions together with a product type *)
+    eapply Weak; [| reflexivity |].
+    apply ProdI.
+
+    (* Step into iter bodies *)
+    eapply PermTypeProofs.Iter. clear xi xs.
+    intros [ni xi] [[ns []] xs].
+    (* Take product apart *)
+    eapply Weak; [| reflexivity |].
+    apply ProdE. unfold fst, snd.
+
+    (* Get ready to handle getNum *)
+    (* first add a ret tt to spec side *)
+    replace (sum_rect
+               (fun _ : unit + A * list A =>
+                  itree (sceE Ss) ({_ : nat & unit} * list A + {_ : nat & unit}))
+               (fun _ : unit => Ret (inr (existT _ ns tt)))
+               (fun '(_, t) => Ret (inl (existT (fun _ : nat => unit) (ns + 1) tt, t)))
+               (unfoldFP xs))
+      with
+      (Ret tt;; sum_rect
+                  (fun _ : unit + A * list A =>
+                     itree (sceE Ss) ({_ : nat & unit} * list A + {_ : nat & unit}))
+                  (fun _ : unit => Ret (inr (existT _ ns tt)))
+                  (fun '(_, t) => Ret (inl (existT (fun _ : nat => unit) (ns + 1) tt, t)))
+                  (unfoldFP xs)).
+    2: {
+      apply bisimulation_is_eq. apply bind_ret_l with (r := tt).
+    }
+
+    eapply Bind.
+    {
+      (* GetNum step *)
+      apply Frame.
+      eapply Weak; [| reflexivity |].
+      apply ExE.
+      apply GetNum.
+    }
+    intros n []. unfold projT1.
+    eapply Weak; [apply PermsE | reflexivity |].
+
+    (* Unfold recursive type *)
+    eapply Weak; [| reflexivity |].
+    eapply sep_conj_Perms_monotone; [reflexivity | apply MuUnfold].
+    unfold fst, snd.
+    eapply OrE.
+    - (* null case *)
+      intros [].
+      (* Get ready to handle isNull *)
+      assert ((Ret (inr (existT (fun _ : nat => unit) ns tt)) : itree (sceE Ss) ((Rs * list A) + Rs)) = (Ret tt;; Ret (inr (existT (fun _ : nat => unit) ns tt)) : itree (sceE Ss) ((Rs * list A) + Rs))).
+      apply bisimulation_is_eq. rewrite bind_ret_l with (r := tt). reflexivity.
+      unfold Rs in H.
+      rewrite H. clear H.
+      eapply Bind.
+      {
+        (* isNull *)
+        rewrite sep_conj_Perms_commut.
+        apply Frame.
+        apply IsNull2.
+      }
+
+      intros b [].
+      (* Get ready to use If *)
+      assert ((Ret (inr (existT (fun _ : nat => unit) ns tt)) : itree (sceE Ss) ((Rs * list A) + Rs)) = if tb then Ret (inr (existT (fun _ : nat => unit) ns tt)) else Exception.throw tt).
+      reflexivity.
+      unfold Rs in H. rewrite H. clear H.
+      eapply Weak; [apply PermsE | reflexivity |].
+      rewrite sep_conj_Perms_commut.
+      apply If.
+      2: { apply Err. }
+      (* reform isNat and sum type *)
+      eapply Weak; [| reflexivity | apply Ret_].
+      etransitivity.
+      2: apply SumI2.
+      etransitivity.
+      2: apply ExI.
+      apply EqCtx.
+    - (* non null case, keep iterating *)
+      intros [a xs'].
+      rewrite sep_conj_Perms_commut.
+      eapply Weak; [| reflexivity |].
+      apply sep_conj_Perms_monotone; [apply StarE | reflexivity].
+
+      (* Get ready to handle isNull *)
+      assert ((Ret (inl (existT (fun _ : nat => unit) (ns + 1) tt, xs')) : itree (sceE Ss) ((Rs * list A) + Rs)) = (Ret tt;; Ret (inl (existT (fun _ : nat => unit) (ns + 1) tt, xs')) : itree (sceE Ss) ((Rs * list A) + Rs))).
+      apply bisimulation_is_eq. rewrite bind_ret_l with (r := tt). reflexivity.
+      unfold Rs in H.
+      rewrite H. clear H.
+      eapply Bind.
+      {
+        (* isNull *)
+        rewrite <- sep_conj_Perms_assoc.
+        apply Frame.
+        apply IsNull1.
+      }
+      intros b [].
+      (* get ready to use If *)
+      assert ((Ret (inl (existT (fun _ : nat => unit) (ns + 1) tt, xs')) : itree (sceE Ss) ((Rs * list A) + Rs)) = if fb then Exception.throw tt else  Ret (inl (existT (fun _ : nat => unit) (ns + 1) tt, xs'))).
+      reflexivity.
+      unfold Rs in H. rewrite H. clear H.
+      eapply Weak; [apply PermsE | reflexivity |].
+      eapply Weak; [| reflexivity |].
+      apply sep_conj_Perms_monotone; [apply PermsE | reflexivity].
+      rewrite <- sep_conj_Perms_assoc.
+      rewrite sep_conj_Perms_commut.
+      apply If.
+      { apply Err. }
+      (* drop first ptr type *)
+      eapply Weak; [| reflexivity |].
+      apply lte_r_sep_conj_Perms.
+      (* get ready to use bind *)
+      assert ((Ret (inl (existT (fun _ : nat => unit) (ns + 1) tt, xs')) : itree (sceE Ss) ((Rs * list A) + Rs)) = Ret tt;; Ret (inl (existT (fun _ : nat => unit) (ns + 1) tt, xs'))).
+      apply bisimulation_is_eq. rewrite bind_ret_l with (r := tt). reflexivity.
+      unfold Rs in H. rewrite H. clear H.
+      (* expose the value that the pointer points to *)
+      rewrite sep_conj_Perms_commut.
+      apply PtrE.
+      intros v.
+      rewrite <- sep_conj_Perms_assoc.
+      rewrite sep_conj_Perms_commut.
+      rewrite <- sep_conj_Perms_assoc.
+      eapply Bind.
+      {
+        apply Frame.
+        eapply Weak; [| reflexivity |].
+        apply PtrOff with (o2 := 1). lia.
+        (* load *)
+        apply Load.
+      }
+      intros v' [].
+      eapply Weak; [apply PermsE | reflexivity |].
+      eapply Weak; [| reflexivity |].
+      apply sep_conj_Perms_monotone; [apply PermsE | reflexivity].
+
+      (* drop pointer perm we just used *)
+      eapply Weak; [| reflexivity |].
+      apply sep_conj_Perms_monotone; [| reflexivity].
+      apply lte_l_sep_conj_Perms.
+      rewrite sep_conj_Perms_assoc.
+
+      (* get rid of old value name v *)
+      eapply Weak; [| reflexivity |].
+      apply sep_conj_Perms_monotone; [apply Cast | reflexivity].
+      clear v. rename v' into v.
+
+      (* reform isNat, list type, and sum type *)
+      eapply Weak; [| reflexivity | apply Ret_].
+      rewrite sep_conj_Perms_commut.
+      etransitivity.
+      2: eapply SumI2.
+      etransitivity.
+      2: eapply ProdI.
+      apply sep_conj_Perms_monotone; [| reflexivity].
+      etransitivity.
+      2: apply ExI.
+      apply EqCtx with (f := fun n => VNum (n + 1)).
+
+      Unshelve. 3: apply T.
+  Qed.
+  End example.
 
 End MemoryPerms.
 
