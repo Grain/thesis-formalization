@@ -2047,34 +2047,36 @@ Section MemoryPerms.
         n++;
   }
    *)
-  Definition ex3i (v : Value) : itree (sceE Si) Value :=
+  Definition length_i (p : Value) : itree (sceE Si) Value :=
     iter (fun '(v, p) => n <- getNum v;;
                       b <- isNull p;;
                       if (b : bool)
                       then Ret (inr (VNum n)) (* v == NULL *)
-                      else v' <- load (offset p 1);; (* continue with *(v + 1) *)
-                           Ret (inl (VNum (n + 1), v')))
-      (VNum 0, v).
+                      else p' <- load (offset p 1);; (* continue with *(p + 1) *)
+                           Ret (inl (VNum (n + 1), p')))
+      (VNum 0, p).
 
-  Definition tb := true.
-  Definition fb := false.
-
-  Definition ex3s {A} (l : list A) : itree (sceE Ss) Rs :=
-    iter (fun '(n, l) =>
+  Definition length_s {A} (l : list A) : itree (sceE Ss) Rs :=
+    iter (fun '(i, l) =>
             sum_rect (fun _ => itree (sceE Ss) (((sigT (fun _ : nat => unit)) * list A) +
                                                (sigT (fun _ : nat => unit))))
-              (fun _ : unit => Ret (inr n))
-              (fun '(h, t) => Ret (inl (existT _ (projT1 n + 1) tt, t)))
+              (fun _ : unit => Ret (inr i))
+              (fun '(h, t) => Ret (inl (existT _ (projT1 i + 1) tt, t)))
               (unfoldFP l))
       (existT _ 0 tt, l).
 
-  Lemma ex3_typing A xi xs (T : VPermType A) :
+  (* used since [if true] immediately reduces *)
+  Definition tb := true.
+  Definition fb := false.
+
+
+  Lemma length_typing A xi xs (T : VPermType A) :
     xi :: list_perm R _ T ▷ xs ⊢
-      ex3i xi ⤳
-      ex3s xs :::
+      length_i xi ⤳
+      length_s xs :::
       isNat.
   Proof.
-    unfold ex3i, ex3s.
+    unfold length_i, length_s.
 
     (* Make the isNat permission for the starting values *)
     eapply Weak with (P2 := VNum 0 :: isNat ▷ existT _ 0 tt * xi :: list_perm R A T ▷ xs);
