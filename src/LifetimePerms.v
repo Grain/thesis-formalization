@@ -939,7 +939,7 @@ Section LifetimePerms.
   Qed.
 
   (* note that lowned_Perms is not monotone *)
-  Instance Proper_lte_Perms_lowned_Perms :
+  Instance Proper_eq_Perms_lowned_Perms :
     Proper (eq ==> eq_Perms ==> eq_Perms ==> eq_Perms) lowned_Perms.
   Proof.
     intros ? l ? P P' HP Q Q' HQ. subst.
