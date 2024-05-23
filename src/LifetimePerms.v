@@ -759,7 +759,6 @@ Section LifetimePerms.
   Lemma convert p q l Hp Hq Hsep :
     p ** owned l q Hq <=
       when l p ** owned l (p ** q) (nonLifetime_sep_conj_perm _ _ Hp Hq Hsep).
-
   Proof.
     split; intros.
     - destruct x. cbn in *.

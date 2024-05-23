@@ -14,3 +14,4 @@ src/Temporal.v
 
 src/Lifetime.v
 src/LifetimePerms.v
+src/LifetimeMemoryPerms.v
