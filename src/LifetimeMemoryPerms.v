@@ -11,8 +11,8 @@ From Coq Require Import
 
 From ITree Require Import
      ITree
-     Eq.Eqit.
-
+     Eq.Eqit
+     Eq.EqAxiom.
 
 From Heapster Require Import
      Utils
@@ -642,9 +642,83 @@ Section Perms.
     cbn in *.
     eexists. split. eexists. reflexivity.
     cbn. exists x, x1. split; [| split; [| split]]; eauto.
-    etransitivity; eauto. apply when_monotone. apply read_lte_write.
+    etransitivity; eauto. apply when_monotone. apply write_lte_read.
   Qed.
 
+  Lemma WhenPtrI A l xi yi xs ys rw o (T : VPermType A) :
+    xi :: when_ptr l (rw, o, eqp yi) ▷ xs * yi :: T ▷ ys ⊑ xi :: when_ptr l (rw, o, T) ▷ ys.
+  Proof.
+    destruct xi; cbn.
+    - rewrite sep_conj_Perms_bottom_absorb. reflexivity.
+    - repeat intro. destruct a. rename p into p'.
+      destruct H as (p & t & (P & (v & ?) & Hp) & Hp' & Hsep & Hlte). subst.
+      destruct Hp as (? & ? & ? & ? & Hsep' & Hlte'). cbn in *. subst.
+      eexists. split; [exists v; reflexivity |].
+      eapply Perms_downwards_closed; eauto.
+      do 2 eexists. split; [| split; [| split]]. apply H. apply Hp'.
+      + symmetry. symmetry in Hsep. eapply separate_upwards_closed; eauto.
+        etransitivity; eauto. apply lte_l_sep_conj_perm.
+      + apply sep_conj_perm_monotone; intuition.
+        etransitivity; eauto. apply lte_l_sep_conj_perm.
+  Qed.
+  Lemma WhenPtrE A B C (P : Perms) l rw o (T : VPermType A) (xi : Value) xs ti ts (U : @PermType Si Ss B C) :
+    (forall yi, P * xi :: when_ptr l (rw, o, eqp yi) ▷ tt * yi :: T ▷ xs ⊢ ti ⤳ ts ::: U) ->
+    P * xi :: when_ptr l (rw, o, T) ▷ xs ⊢ ti ⤳ ts ::: U.
+  Proof.
+    repeat intro. rename p into p''. destruct H0 as (p & p' & Hp & Hptr & Hsep & Hlte).
+    destruct xi; [contradiction | destruct a].
+    destruct Hptr as (? & (? & ?) & ?). subst.
+    destruct H2 as (pptr & pt & Hptr & Hpt & Hsep' & Hlte').
+    eapply H; eauto. exists (p ** pptr), pt.
+    split; [| split; [| split]]; eauto.
+    - do 2 eexists. split; [| split; [| split]]. eauto. 3: reflexivity.
+      + eexists. split; eauto. do 2 eexists.
+        split; [| split; [| split]]. eauto. reflexivity. 2: apply sep_conj_perm_top'.
+        apply separate_top.
+      + eapply separate_upwards_closed; eauto. etransitivity; eauto. apply lte_l_sep_conj_perm.
+    - symmetry. symmetry in Hsep'. apply separate_sep_conj_perm; auto.
+      + symmetry. eapply separate_upwards_closed; eauto. etransitivity; eauto.
+        apply lte_r_sep_conj_perm.
+      + symmetry. eapply separate_upwards_closed; eauto. etransitivity; eauto.
+        apply lte_l_sep_conj_perm.
+    - etransitivity; eauto. rewrite sep_conj_perm_assoc.
+      apply sep_conj_perm_monotone; auto; reflexivity.
+  Qed.
+
+  Lemma WhenReadDup b o o' l y :
+    VPtr (b, o) :: when_ptr l (R, o', eqp y) ▷ tt ⊑
+    VPtr (b, o) :: when_ptr l (R, o', eqp y) ▷ tt * VPtr (b, o) :: when_ptr l (R, o', eqp y) ▷ tt.
+  Proof.
+    (* unfold when_ptr. unfold when_ptr_Perms. *)
+    repeat intro.
+    destruct H as (? & (v & ?) & ?). subst.
+    exists (when l (read_perm (b, o + o') v)), (when l (read_perm (b, o + o') v)).
+    destruct H0 as (pread & peq & Hpread & Hpeq & Hsep & Hlte).
+    cbn in Hpread, Hpeq. subst.
+    assert (when l (read_perm (b, o + o') v) ∈ VPtr (b, o) :: when_ptr l (R, o', eqp v) ▷ tt).
+    {
+      eexists. split; eauto. cbn in *. exists (when l (read_perm (b, o + o') v)), top_perm.
+      split; [| split; [| split]]. 1, 2: reflexivity.
+      - apply separate_top.
+      - rewrite sep_conj_perm_top. reflexivity.
+    }
+    assert (@when Si Ss _ l (read_perm (b, o + o') v) ⊥ when l (read_perm (b, o + o') v)).
+    {
+      apply sep_when; auto.
+      apply when_nonLifetime. apply nonLifetime_read_perm.
+      symmetry.
+      apply sep_when.
+      apply nonLifetime_read_perm.
+      apply read_separate.
+    }
+    split; [| split; [| split]]; auto.
+    constructor; intros; eauto.
+    - split; [| split]; auto. 1, 2: apply Hpread; apply Hlte; auto.
+    - split; apply Hpread; apply Hlte; auto.
+    - apply Hlte. constructor. left. apply Hpread. induction H1; auto.
+      + destruct H1; auto.
+      + etransitivity; eauto.
+  Qed.
 
   Lemma Lifetime_Load xi yi xs l rw P Q :
     xi :: when_ptr l (rw, 0, eqp yi) ▷ xs * lowned_Perms l P Q ⊢
@@ -687,6 +761,7 @@ Section Perms.
     - symmetry. apply separate_top.
     - rewrite sep_conj_perm_commut. apply sep_conj_perm_top.
   Qed.
+
 
   Lemma sep_step_when_write_perm l p v v' :
     sep_step (when (Ss := Ss) l (write_perm p v)) (when l (write_perm p v')).
@@ -1844,7 +1919,8 @@ Section Perms.
 
 
   (*** Actual rules *)
-  Definition lownedP' (* not yet returned *) (back : list (nat * nat * nat))
+  Definition lownedP
+    (* not yet returned *) (back : list (nat * nat * nat))
     (* just the returned ones *) front :
     @PermType Si Ss nat (specs_type front) :=
     {|
@@ -1865,11 +1941,54 @@ Section Perms.
       ptApp := fun a b => lfinished_Perms (Ss := Ss) l (a :: P ▷ b)
     |}.
 
-  Lemma typing_begin' :
+  Lemma WhenLoad xi yi xs l rw front back xs' :
+    xi :: when_ptr l (rw, 0, eqp yi) ▷ xs * l :: lownedP front back ▷ xs' ⊢
+    load xi ⤳
+    Ret tt :::
+    eqp yi ∅ (xi :: when_ptr l (rw, 0, eqp yi) ▷ xs * l :: lownedP front back ▷ xs').
+  Proof.
+    intros p si ss Hp Hpre.
+    repeat intro. pstep. unfold load. rewritebisim @bind_trigger.
+    econstructor; eauto; try reflexivity.
+    destruct xi as [? | [b o]].
+    { destruct Hp as (? & ? & ? & ?). contradiction H. }
+    destruct Hp as (pwhen & powned & Hpwhen & Hpowned & Hsep & Hlte).
+    destruct Hpwhen as (? & (v & ?) & Hpwhen); subst.
+    destruct Hpwhen as (pwhen' & peq & Hpwhen' & Hpeq & Hsep' & Hlte'). cbn in Hpeq. subst.
+    assert (Hl: statusOf l (lget si) = Some current).
+    {
+      apply Hlte in Hpre. destruct Hpre as (_ & Hpre & _).
+      destruct Hpowned as (? & ? & ? & ? & ? & ?).
+      destruct H0 as (? & ? & ? & ? & ? & ? & ? & ? & ? & ?).
+      apply H2 in Hpre. destruct Hpre as (_ & ? & _).
+      apply H3 in H5. apply H5.
+    }
+    assert (Hv: read (lget si) (b, o) = Some v).
+    {
+      apply Hlte in Hpre. rewrite Nat.add_0_r in *.
+      destruct Hpre as (Hpre & _). apply Hlte' in Hpre.
+      destruct Hpre as (Hpre & _). apply Hpwhen' in Hpre.
+      destruct rw.
+      apply Hpre; auto.
+      symmetry. apply Hpre; auto. (* TODO: why are read_perm and write_perm different *)
+    }
+    rewrite Hv. constructor; auto.
+    cbn in Hpwhen'.
+    cbn. exists top_perm, p. split; [| split; [| split]]; auto.
+    - exists pwhen, powned. split; auto.
+      eexists. split; eauto.
+      cbn. exists pwhen', top_perm. split; [| split; [| split]]; eauto.
+      apply separate_top.
+      rewrite sep_conj_perm_top. etransitivity; eauto. apply lte_l_sep_conj_perm.
+    - symmetry. apply separate_top.
+    - rewrite sep_conj_perm_commut. apply sep_conj_perm_top.
+  Qed.
+
+  Lemma typing_begin :
     lifetime_Perms ⊢
       beginLifetime ⤳
       Ret tt :::
-      lownedP' [] [] ∅ lifetime_Perms.
+      lownedP [] [] ∅ lifetime_Perms.
   Proof.
     intros p' si ss (? & (l & ?) & Hlte) Hpre; subst.
     unfold beginLifetime. unfold id.
@@ -2324,15 +2443,6 @@ Section Perms.
       do 2 rewrite <- Eqdep.EqdepTheory.eq_rect_eq. reflexivity.
   Qed.
 
-  (* A := specs_type vals' *)
-  (* B := specs_type (vals - vals') -> specs_type vals *)
-  Definition coerce Si' A B
-    (F : A -> B) (T : @PermType Si Ss Si' A) : @PermType Si Ss Si' B :=
-    {| ptApp := fun n b => join_Perms (fun S => exists a, F a = b /\ S = ptApp _ _ T n a) |}.
-
-  (* Definition lownedP front back := *)
-  (*   coerce _ _ _ (combine_specs_type front back) (lownedP' back front). *)
-
 
   Lemma typing_end_ptr_n'' l vals xs
     (HT: Forall (fun '(_, _, _, T) => forall (v : Value) (a : (projT1 T)), nonLifetime_Perms (v :: projT2 T ▷ a)) vals) :
@@ -2700,12 +2810,12 @@ Section Perms.
           rewrite <- sep_conj_perm_assoc. reflexivity.
   Qed.
 
-  Lemma typing_end'
+  Lemma typing_end
     vals l xs
     (HT: Forall (fun '(_, _, _, T) =>
                    forall (v : Value) (a : projT1 T), nonLifetime_Perms (v :: projT2 T ▷ a))
            vals) :
-    l :: lownedP' [] vals ▷ xs ⊢
+    l :: lownedP [] vals ▷ xs ⊢
       endLifetime l ⤳
       Ret tt :::
       lfinishedP vals xs.
@@ -2722,13 +2832,263 @@ Section Perms.
     apply lte_l_sep_conj_perm.
   Qed.
 
-  (*
-  Lemma typing_end
+  Lemma partial_lownedP b o o' A (T : VPermType A) front back xs l xs'
+    (Hnlp : forall (xi : Value) (xs0 : A), nonLifetime_Perms (xi :: T ▷ xs0)):
+    VPtr (b, o) :: when_ptr l (W, o', T) ▷ xs *
+    l :: lownedP (back ++ [(b, o, o')]) front ▷ xs' ⊑
+
+    l :: lownedP back (cons (b, o, o', existT _ A T) front) ▷ (xs, xs').
+  Proof.
+    unfold lownedP.
+    unfold ptApp.
+    rewrite sep_conj_Perms_assoc.
+    apply sep_conj_Perms_monotone.
+    - unfold when_ptrs_T'.
+      fold when_ptrs_T'. unfold timesPT. unfold values. fold values.
+      unfold fst, snd, projT2.
+      apply sep_conj_Perms_monotone; [| reflexivity].
+      apply weaken_when_ptr.
+    - apply Proper_eq_Perms_lowned_Perms; auto.
+      + rewrite remove_fourth_cons.
+        rewrite <- app_comm_cons.
+        rewrite app_assoc.
+        remember (remove_fourth front ++ back).
+        clear Heql0.
+        induction l0.
+        * reflexivity.
+        * rewrite <- app_comm_cons. unfold when_ptrs_trueP at 2. fold when_ptrs_trueP.
+          destruct a as [[? ?] ?].
+          rewrite <- IHl0.
+          unfold when_ptrs_trueP. fold when_ptrs_trueP.
+          do 2 rewrite sep_conj_Perms_assoc.
+          rewrite (sep_conj_Perms_commut (VPtr (n, n0) :: when_ptr l (R, n1, trueP) ▷ tt)).
+          reflexivity.
+      + rewrite remove_fourth_cons.
+        rewrite <- app_comm_cons.
+        rewrite app_assoc.
+        remember (remove_fourth front ++ back).
+        clear Heql0.
+        induction l0.
+        * reflexivity.
+        * rewrite <- app_comm_cons. unfold ptrs_trueP' at 2. fold ptrs_trueP'.
+          destruct a as [[? ?] ?].
+          rewrite <- IHl0.
+          unfold ptrs_trueP'. fold ptrs_trueP'.
+          do 2 rewrite sep_conj_Perms_assoc.
+          rewrite (sep_conj_Perms_commut (VPtr (b, o) :: ptr (W, o', trueP) ▷ tt)).
+          reflexivity.
+  Qed.
+
+  Lemma split_lownedP b o o' A (T : VPermType A) front back xs l xs'
+    (Hnlp : forall (xi : Value) (xs0 : A), nonLifetime_Perms (xi :: T ▷ xs0)):
+    VPtr (b, o) :: ptr (W, o', T) ▷ xs *
+      l :: lownedP back front ▷ xs' ⊑
+
+    VPtr (b, o) :: when_ptr l (W, o', T) ▷ xs *
+      l :: lownedP (back ++ [(b, o, o')]) front ▷ xs'.
+  Proof.
+    etransitivity.
+    {
+      unfold lownedP. unfold ptApp.
+      rewrite sep_conj_Perms_commut.
+      rewrite <- sep_conj_Perms_assoc.
+      apply sep_conj_Perms_monotone; [reflexivity |].
+      rewrite sep_conj_Perms_commut.
+      apply split_Perms_T; auto.
+    }
+    rewrite sep_conj_Perms_commut.
+    rewrite <- sep_conj_Perms_assoc.
+    apply sep_conj_Perms_monotone; [reflexivity |].
+    unfold lownedP. unfold ptApp.
+    rewrite sep_conj_Perms_commut.
+    apply sep_conj_Perms_monotone; [reflexivity |].
+    apply Proper_eq_Perms_lowned_Perms; auto.
+    - setoid_rewrite sep_conj_Perms_commut.
+      rewrite app_assoc.
+      remember (remove_fourth front ++ back). clear Heql0.
+      induction l0.
+      + cbn. rewrite sep_conj_Perms_commut. reflexivity.
+      + rewrite <- app_comm_cons. unfold when_ptrs_trueP. fold when_ptrs_trueP.
+        destruct a as [[? ?] ?].
+        rewrite <- sep_conj_Perms_assoc.
+        rewrite <- IHl0. reflexivity.
+    - setoid_rewrite sep_conj_Perms_commut.
+      rewrite app_assoc.
+      remember (remove_fourth front ++ back).  clear Heql0.
+      induction l0.
+      + cbn. rewrite sep_conj_Perms_commut. reflexivity.
+      + rewrite <- app_comm_cons. unfold ptrs_trueP'. fold ptrs_trueP'.
+        destruct a as [[? ?] ?].
+        rewrite <- sep_conj_Perms_assoc.
+        rewrite <- IHl0. reflexivity.
+  Qed.
+
+  Lemma lifetime_ex1 b o xs xs' :
+    lifetime_Perms * (VPtr (b, o)) :: ptr (W, 0, IsNat Si Ss) ▷ xs * (VPtr (b, o)) :: ptr (W, 1, IsNat Si Ss) ▷ xs' ⊢
+      (l <- beginLifetime ;; endLifetime l) ⤳
+      (Ret tt;; Ret tt) :::
+      (lfinishedP [(b, o, 0, existT _ {nat & unit} isNat);
+                   (b, o, 1, existT _ {nat & unit} isNat)]
+         (xs, (xs', tt)) ∅ lifetime_Perms).
+  Proof.
+    eapply Bind.
+    { rewrite <- sep_conj_Perms_assoc. apply Frame. apply typing_begin. }
+    intros l [].
+    eapply Weak; [apply PermsE | reflexivity |].
+    eapply Weak; [| reflexivity |].
+    apply sep_conj_Perms_monotone; [apply PermsE | reflexivity].
+    rewrite sep_conj_Perms_commut.
+    (* setoid_rewrite (sep_conj_Perms_commut lifetime_Perms). *)
+    (* unfold "∅". unfold ptApp. *)
+    rewrite sep_conj_Perms_assoc.
+    (* setoid_rewrite <- (sep_conj_Perms_assoc lifetime_Perms). *)
+    apply Frame.
+
+    eapply Weak; [| reflexivity |].
+    {
+      rewrite sep_conj_Perms_commut.
+      rewrite sep_conj_Perms_assoc.
+      apply sep_conj_Perms_monotone; [| reflexivity].
+      rewrite sep_conj_Perms_commut.
+      apply split_lownedP.
+      apply nonLifetime_IsNat.
+    }
+    eapply Weak; [| reflexivity |].
+    {
+      rewrite <- sep_conj_Perms_assoc.
+      apply sep_conj_Perms_monotone; [reflexivity |].
+      rewrite sep_conj_Perms_commut.
+      apply split_lownedP.
+      apply nonLifetime_IsNat.
+    }
+    eapply Weak; [| reflexivity |].
+    {
+      apply sep_conj_Perms_monotone; [reflexivity |].
+      apply partial_lownedP.
+      apply nonLifetime_IsNat.
+    }
+    eapply Weak; [| reflexivity |].
+    {
+      apply partial_lownedP.
+      apply nonLifetime_IsNat.
+    }
+    apply typing_end.
+
+    constructor.
+    apply nonLifetime_IsNat.
+    constructor. apply nonLifetime_IsNat.
+    constructor.
+  Qed.
+
+  Lemma lifetime_ex2 b o xs p' :
+    lifetime_Perms *
+      (VPtr (b, o)) :: ptr (W, 0, IsNat Si Ss) ▷ xs *
+      p' :: eqp (VPtr (b, o)) ▷ tt ⊢
+    (l <- beginLifetime ;; load (VPtr (b, o));; load p';; endLifetime l) ⤳
+    (Ret tt) :::
+    (lfinishedP [(b, o, 0, existT _ {nat & unit} isNat)] (xs, tt) ∅ lifetime_Perms).
+  Proof.
+    (* Set Printing All. *)
+    replace (Ret tt) with (Ret tt;; Ret tt : itree (sceE Ss) unit).
+    2: {
+      apply bisimulation_is_eq. rewrite bind_ret_l. reflexivity.
+    }
+    eapply Bind.
+    { rewrite <- sep_conj_Perms_assoc. apply Frame. apply typing_begin. }
+    intros l [].
+    eapply Weak; [apply PermsE | reflexivity |].
+    eapply Weak; [| reflexivity |].
+    apply sep_conj_Perms_monotone; [apply PermsE | reflexivity].
+    rewrite sep_conj_Perms_commut.
+    (* setoid_rewrite (sep_conj_Perms_commut lifetime_Perms). *)
+    (* unfold "∅". unfold ptApp. *)
+    rewrite sep_conj_Perms_assoc.
+    (* setoid_rewrite <- (sep_conj_Perms_assoc lifetime_Perms). *)
+    apply Frame.
+
+    eapply Weak; [| reflexivity |].
+    {
+      rewrite sep_conj_Perms_commut.
+      rewrite sep_conj_Perms_assoc.
+      apply sep_conj_Perms_monotone; [| reflexivity].
+      rewrite sep_conj_Perms_commut.
+      apply split_lownedP.
+      apply nonLifetime_IsNat.
+    }
+    eapply Weak; [| reflexivity |].
+    {
+      rewrite <- sep_conj_Perms_assoc.
+      apply sep_conj_Perms_monotone; [| reflexivity].
+      apply weaken_when_ptr.
+    }
+
+    rewrite sep_conj_Perms_commut.
+    apply WhenPtrE. intros v.
+    eapply Weak; [| reflexivity |].
+    {
+      rewrite sep_conj_Perms_commut.
+      rewrite sep_conj_Perms_assoc.
+      apply sep_conj_Perms_monotone; [reflexivity |].
+      eapply WhenReadDup.
+    }
+    eapply Weak; [| reflexivity |].
+    {
+      do 2 rewrite <- sep_conj_Perms_assoc.
+      apply sep_conj_Perms_monotone; [| reflexivity].
+      apply ExE.
+    }
+    destruct xs as [n []]. unfold projT1, projT2.
+    eapply Weak; [| reflexivity |].
+    {
+      rewrite sep_conj_Perms_assoc.
+      apply sep_conj_Perms_monotone; [reflexivity |].
+      rewrite sep_conj_Perms_assoc.
+      apply sep_conj_Perms_monotone; [| reflexivity].
+      apply Cast.
+    }
+
+    replace (Ret tt) with (Ret tt;; Ret tt : itree (sceE Ss) unit).
+    2: {
+      apply bisimulation_is_eq. rewrite bind_ret_l. reflexivity.
+    }
+    eapply Bind.
+    {
+      rewrite <- sep_conj_Perms_assoc.
+      rewrite sep_conj_Perms_commut.
+      apply Frame.
+      rewrite sep_conj_Perms_commut.
+      rewrite <- sep_conj_Perms_assoc.
+      rewrite sep_conj_Perms_commut.
+      apply Frame.
+      apply WhenLoad.
+    }
+    intros v' [].
+
+    destruct xs as [n []]. unfold projT1, projT2.
+    apply typing_end.
+
+    constructor.
+    apply nonLifetime_IsNat.
+    constructor. apply nonLifetime_IsNat.
+    constructor.
+  Qed.
+
+  (* A := specs_type vals' *)
+  (* B := specs_type (vals - vals') -> specs_type vals *)
+  Definition coerce Si' A B
+    (F : A -> B) (T : @PermType Si Ss Si' A) : @PermType Si Ss Si' B :=
+    {| ptApp := fun n b => join_Perms (fun S => exists a, F a = b /\ S = ptApp _ _ T n a) |}.
+
+  (* TODO: back should not store the content types *)
+  Definition lownedP' front back :=
+    coerce _ _ _ (combine_specs_type front back) (lownedP (remove_fourth back) front).
+
+  Lemma typing_end'
     vals l f
     (HT: Forall (fun '(_, _, _, T) =>
                    forall (v : Value) (a : projT1 T), nonLifetime_Perms (v :: projT2 T ▷ a))
            vals) :
-    l :: lownedP vals [] ▷ f ⊢
+    l :: lownedP' vals [] ▷ f ⊢
       endLifetime l ⤳
       Ret tt :::
       lfinishedP vals (cast2 _ (f tt)).
@@ -2750,11 +3110,11 @@ Section Perms.
     apply lte_l_sep_conj_perm.
   Qed.
 
-  Lemma typing_begin :
+  Lemma typing_begin' :
     lifetime_Perms ⊢
       beginLifetime ⤳
       Ret (fun _ => tt) :::
-      lownedP [] [] ∅ lifetime_Perms.
+      lownedP' [] [] ∅ lifetime_Perms.
   Proof.
     intros p' si ss (? & (l & ?) & Hlte) Hpre; subst.
     unfold beginLifetime. unfold id.
@@ -2805,155 +3165,6 @@ Section Perms.
       + apply owned_lifetime_sep. symmetry. apply separate_top. lia.
         Unshelve. cbn. apply tt.
   Qed.
-   *)
 
-  Lemma partial_lownedP' b o o' A (T : VPermType A) front back xs l xs'
-    (Hnlp : forall (xi : Value) (xs0 : A), nonLifetime_Perms (xi :: T ▷ xs0)):
-    VPtr (b, o) :: when_ptr l (W, o', T) ▷ xs *
-      l :: lownedP' (back ++ [(b, o, o')]) front ▷ xs' ⊑
-
-    l :: lownedP' back (cons (b, o, o', existT _ A T) front) ▷ (xs, xs').
-  Proof.
-    unfold lownedP'.
-    unfold ptApp.
-    rewrite sep_conj_Perms_assoc.
-    apply sep_conj_Perms_monotone.
-    - unfold when_ptrs_T'.
-      fold when_ptrs_T'. unfold timesPT. unfold values. fold values.
-      unfold fst, snd, projT2.
-      apply sep_conj_Perms_monotone; [| reflexivity].
-      apply weaken_when_ptr.
-    - apply Proper_eq_Perms_lowned_Perms; auto.
-      + rewrite remove_fourth_cons.
-        rewrite <- app_comm_cons.
-        rewrite app_assoc.
-        remember (remove_fourth front ++ back).
-        clear Heql0.
-        induction l0.
-        * reflexivity.
-        * rewrite <- app_comm_cons. unfold when_ptrs_trueP at 2. fold when_ptrs_trueP.
-          destruct a as [[? ?] ?].
-          rewrite <- IHl0.
-          unfold when_ptrs_trueP. fold when_ptrs_trueP.
-          do 2 rewrite sep_conj_Perms_assoc.
-          rewrite (sep_conj_Perms_commut (VPtr (n, n0) :: when_ptr l (R, n1, trueP) ▷ tt)).
-          reflexivity.
-      + rewrite remove_fourth_cons.
-        rewrite <- app_comm_cons.
-        rewrite app_assoc.
-        remember (remove_fourth front ++ back).
-        clear Heql0.
-        induction l0.
-        * reflexivity.
-        * rewrite <- app_comm_cons. unfold ptrs_trueP' at 2. fold ptrs_trueP'.
-          destruct a as [[? ?] ?].
-          rewrite <- IHl0.
-          unfold ptrs_trueP'. fold ptrs_trueP'.
-          do 2 rewrite sep_conj_Perms_assoc.
-          rewrite (sep_conj_Perms_commut (VPtr (b, o) :: ptr (W, o', trueP) ▷ tt)).
-          reflexivity.
-  Qed.
-
-  Lemma split_lownedP' b o o' A (T : VPermType A) front back xs l xs'
-    (Hnlp : forall (xi : Value) (xs0 : A), nonLifetime_Perms (xi :: T ▷ xs0)):
-    VPtr (b, o) :: ptr (W, o', T) ▷ xs *
-      l :: lownedP' back front ▷ xs' ⊑
-
-    VPtr (b, o) :: when_ptr l (W, o', T) ▷ xs *
-      l :: lownedP' (back ++ [(b, o, o')]) front ▷ xs'.
-  Proof.
-    etransitivity.
-    {
-      unfold lownedP'. unfold ptApp.
-      rewrite sep_conj_Perms_commut.
-      rewrite <- sep_conj_Perms_assoc.
-      apply sep_conj_Perms_monotone; [reflexivity |].
-      rewrite sep_conj_Perms_commut.
-      apply split_Perms_T; auto.
-    }
-    rewrite sep_conj_Perms_commut.
-    rewrite <- sep_conj_Perms_assoc.
-    apply sep_conj_Perms_monotone; [reflexivity |].
-    unfold lownedP'. unfold ptApp.
-    rewrite sep_conj_Perms_commut.
-    apply sep_conj_Perms_monotone; [reflexivity |].
-    apply Proper_eq_Perms_lowned_Perms; auto.
-    - setoid_rewrite sep_conj_Perms_commut.
-      rewrite app_assoc.
-      remember (remove_fourth front ++ back). clear Heql0.
-      induction l0.
-      + cbn. rewrite sep_conj_Perms_commut. reflexivity.
-      + rewrite <- app_comm_cons. unfold when_ptrs_trueP. fold when_ptrs_trueP.
-        destruct a as [[? ?] ?].
-        rewrite <- sep_conj_Perms_assoc.
-        rewrite <- IHl0. reflexivity.
-    - setoid_rewrite sep_conj_Perms_commut.
-      rewrite app_assoc.
-      remember (remove_fourth front ++ back).  clear Heql0.
-      induction l0.
-      + cbn. rewrite sep_conj_Perms_commut. reflexivity.
-      + rewrite <- app_comm_cons. unfold ptrs_trueP'. fold ptrs_trueP'.
-        destruct a as [[? ?] ?].
-        rewrite <- sep_conj_Perms_assoc.
-        rewrite <- IHl0. reflexivity.
-  Qed.
-
-  Lemma ex3_typing b o xs xs' :
-    lifetime_Perms * (VPtr (b, o)) :: ptr (W, 0, IsNat Si Ss) ▷ xs * (VPtr (b, o)) :: ptr (W, 1, IsNat Si Ss) ▷ xs' ⊢
-      (l <- beginLifetime ;; endLifetime l) ⤳
-      (Ret tt;; Ret tt) :::
-      (lfinishedP [(b, o, 0, existT _ {nat & unit} isNat);
-                   (b, o, 1, existT _ {nat & unit} isNat)]
-         (xs, (xs', tt)) ∅ lifetime_Perms).
-  Proof.
-    eapply Bind.
-    { rewrite <- sep_conj_Perms_assoc. apply Frame. apply typing_begin'. }
-    intros. unfold id.
-    eapply Weak; [apply PermsE | reflexivity |].
-    eapply Weak; [| reflexivity |].
-    apply sep_conj_Perms_monotone; [apply PermsE | reflexivity].
-    rewrite sep_conj_Perms_commut.
-    (* setoid_rewrite (sep_conj_Perms_commut lifetime_Perms). *)
-    (* unfold "∅". unfold ptApp. *)
-    rewrite sep_conj_Perms_assoc.
-    (* setoid_rewrite <- (sep_conj_Perms_assoc lifetime_Perms). *)
-    apply Frame.
-
-    eapply Weak; [| reflexivity |].
-    {
-      rewrite sep_conj_Perms_commut.
-      rewrite sep_conj_Perms_assoc.
-      apply sep_conj_Perms_monotone; [| reflexivity].
-      rewrite sep_conj_Perms_commut.
-      apply split_lownedP'.
-      apply nonLifetime_IsNat.
-    }
-    eapply Weak; [| reflexivity |].
-    {
-      rewrite <- sep_conj_Perms_assoc.
-      apply sep_conj_Perms_monotone; [reflexivity |].
-      rewrite sep_conj_Perms_commut.
-      apply split_lownedP'.
-      apply nonLifetime_IsNat.
-    }
-    eapply Weak; [| reflexivity |].
-    {
-      apply sep_conj_Perms_monotone; [reflexivity |].
-      apply partial_lownedP'.
-      apply nonLifetime_IsNat.
-    }
-    eapply Weak; [| reflexivity |].
-    {
-      apply partial_lownedP'.
-      apply nonLifetime_IsNat.
-    }
-    destruct xs0.
-    apply typing_end'.
-
-    constructor.
-    apply nonLifetime_IsNat.
-    constructor. apply nonLifetime_IsNat.
-    constructor.
-  Qed.
 
 End Perms.

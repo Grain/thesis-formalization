@@ -266,7 +266,7 @@ Section MemoryPerms.
     split; intros; auto; destruct x, y; cbn in *; subst; reflexivity.
   Qed.
 
-  Lemma read_lte_write : forall ptr v, write_perm ptr v <= read_perm ptr v.
+  Lemma write_lte_read : forall ptr v, write_perm ptr v <= read_perm ptr v.
   Proof.
     constructor; cbn; intros [] []; subst; auto. intros; subst.
     split; [| split; [| split]]; try reflexivity.
@@ -784,6 +784,23 @@ Section MemoryPerms.
         apply lte_l_sep_conj_perm.
     - etransitivity; eauto. rewrite sep_conj_perm_assoc.
       apply sep_conj_perm_monotone; auto; reflexivity.
+  Qed.
+
+  Lemma PtrWeak A o xi (T : VPermType A) xs :
+    xi :: ptr (W, o, T) ▷ xs ⊑ xi :: ptr (R, o, T) ▷ xs.
+  Proof.
+    repeat intro. cbn in *. destruct xi; [contradiction |].
+    destruct a as [b o']. unfold offset in *.
+    destruct H as (? & (v & ?) & ?). subst.
+    destruct H0 as (pwrite & pt & Hpwrite & Hpt & Hsep & Hlte). cbn in Hpwrite.
+    eexists. split.  eexists. reflexivity.
+    exists (read_perm (b, o' + o) v), pt.
+    split; [| split; [| split]]; eauto.
+    - cbn. reflexivity.
+    - symmetry. eapply separate_upwards_closed. symmetry. eauto.
+      etransitivity; eauto. apply write_lte_read.
+    - etransitivity; eauto. apply sep_conj_perm_monotone; [| reflexivity].
+      etransitivity; eauto. apply write_lte_read.
   Qed.
 
   Lemma ReadDup o xi yi :

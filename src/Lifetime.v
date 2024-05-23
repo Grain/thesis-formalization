@@ -52,24 +52,6 @@ Proof.
     etransitivity; eauto.
 Qed.
 
-(** [s1] subsumes [s2], now with unstarted lifetimes (None) *)
-Definition statusOf_subsumes (s1 s2 : option status) : Prop :=
-  match s1, s2 with
-  (* [s1] can't end before [s2] *)
-  | Some finished, Some finished => True
-  | Some finished, _ => False
-    (* [s2] can't start before [s1] *)
-  | None, Some _ => False
-  | _, _ => True
-  end.
-
-Global Instance statusOf_subsumes_preorder : PreOrder statusOf_subsumes.
-Proof.
-  constructor; repeat intro; subst; auto.
-  - destruct x; [destruct s |]; cbn; auto.
-  - destruct x, y, z; cbn in *; intuition; destruct s, s0; intuition.
-Qed.
-
 Definition Lifetimes := list status.
 
 Definition statusOf (l : nat) (ls : Lifetimes) : option status :=
