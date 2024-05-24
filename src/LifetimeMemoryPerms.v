@@ -1984,6 +1984,88 @@ Section Perms.
     - rewrite sep_conj_perm_commut. apply sep_conj_perm_top.
   Qed.
 
+  Lemma WhenStore l A xi yi xs (P : @VPermType Si Ss A) front back xs' :
+    xi :: when_ptr l (W, 0, P) ▷ xs * l :: lownedP front back ▷ xs' ⊢
+       store xi yi ⤳
+       Ret tt :::
+       trueP ∅ (xi :: when_ptr l (W, 0, eqp yi) ▷ tt * l :: lownedP front back ▷ xs').
+  Proof.
+    repeat intro. pstep. unfold store. destruct xi as [| [b o]]; try contradiction.
+    { destruct H as (? & ? & ? & ?). inversion H. }
+    rewritebisim @bind_trigger.
+    rename p into p'. rename H0 into Hpre.
+    destruct H as (p & powned & Hpwhen & Hpowned & Hsep & Hlte).
+    destruct Hpwhen as (? & (v & ?) & Hwrite); subst.
+    destruct Hwrite as (pwhen & pp & Hpwhen & Hp' & Hsep' & Hlte').
+    cbn in Hpwhen.
+    rewrite Nat.add_0_r in Hpwhen.
+    assert (Hl: statusOf l (lget c1) = Some current).
+    {
+      apply Hlte in Hpre. destruct Hpre as (_ & Hpre & _).
+      destruct Hpowned as (? & ? & ? & ? & ? & ?).
+      destruct H0 as (? & ? & ? & ? & ? & ? & ? & ? & ? & ?).
+      apply H2 in Hpre. destruct Hpre as (_ & ? & _).
+      apply H3 in H5. apply H5.
+    }
+
+    assert (exists val, read (lget c1) (b, o) = Some val).
+    {
+      apply Hlte in Hpre. destruct Hpre as (Hpre & ? & _).
+      apply Hlte' in Hpre. destruct Hpre as (Hpre & _).
+      apply Hpwhen in Hpre. eexists.
+      symmetry. apply Hpre; auto.
+    }
+    destruct H as (val & Hread). eapply (read_success_write _ _ _ yi) in Hread.
+    destruct Hread as (c' & Hwrite).
+    assert (Hguar : guar p (c1, c2) ((lput c1 c'), c2)).
+    {
+      apply Hlte'. constructor. left. apply Hpwhen. right.
+      cbn.
+      repeat rewrite lGetPut.
+      split; [| split; [| split; [| split; [| split]]]]; auto.
+      + eexists. reflexivity.
+      + eapply write_success_read_neq; eauto.
+      + eapply write_success_sizeof; eauto.
+      + eapply write_success_length; eauto.
+    }
+    econstructor; eauto.
+    3: {
+      rewrite Hwrite. constructor; eauto.
+      2: { exists top_perm. eexists. split; [| split; [| split]]; auto.
+           3: { symmetry. apply separate_top. }
+           3: { rewrite sep_conj_perm_commut. rewrite sep_conj_perm_top. reflexivity. }
+           1: { exists. }
+           exists (LifetimePerms.when l (write_perm (b, o) yi)), powned.
+           split; [| split; [| split]]; auto.
+           - eexists. split; eauto. cbn. eexists. exists top_perm.
+             rewrite Nat.add_0_r.
+             split; [| split; [| split]]; try reflexivity.
+             + apply separate_top.
+             + rewrite sep_conj_perm_top. reflexivity.
+           - eapply sep_step_when_write_perm. symmetry.
+             eapply separate_upwards_closed; eauto.
+             eapply separate_upwards_closed. symmetry. eauto.
+             etransitivity; eauto. apply lte_l_sep_conj_perm.
+           - reflexivity.
+      }
+      cbn. split; [| split].
+      - intros. symmetry. eapply write_success_read_eq; rewrite lGetPut; eauto.
+      - respects.
+        2: { apply Hlte. apply Hpre. }
+        apply Hsep; auto.
+      - eapply sep_step_when_write_perm. symmetry.
+        eapply separate_upwards_closed; eauto.
+        eapply separate_upwards_closed. symmetry; eauto.
+        etransitivity; eauto. apply lte_l_sep_conj_perm.
+    }
+    - rewrite Hwrite. apply Hlte. constructor. left. auto.
+    - eapply sep_step_lte; eauto. apply sep_step_sep_conj_l; auto.
+      cbn in *. eapply sep_step_lte; eauto.
+      eapply sep_step_lte. apply lte_l_sep_conj_perm.
+      eapply sep_step_lte; eauto.
+      intros ? []. constructor; auto.
+  Qed.
+
   Lemma typing_begin :
     lifetime_Perms ⊢
       beginLifetime ⤳
