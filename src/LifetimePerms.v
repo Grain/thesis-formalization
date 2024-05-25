@@ -1233,7 +1233,7 @@ Section LifetimePerms.
     - split.
       + apply nonLifetime_guar in H0; auto. cbn in H0. rewrite H0. reflexivity.
       + intros. apply H; auto.
-  Qed.
+  Abort. (* uses an admitted lemma *)
 
   Lemma sep_sep_conj_perm_owned l
     p (Hp : nonLifetime p) (Hrelyp : rely_inv p)
