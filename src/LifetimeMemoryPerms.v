@@ -3129,12 +3129,12 @@ Section Perms.
     eapply Weak; [| reflexivity |].
     apply sep_conj_Perms_monotone; [apply PermsE | reflexivity].
     rewrite sep_conj_Perms_commut.
-    (* setoid_rewrite (sep_conj_Perms_commut lifetime_Perms). *)
-    (* unfold "∅". unfold ptApp. *)
     rewrite sep_conj_Perms_assoc.
-    (* setoid_rewrite <- (sep_conj_Perms_assoc lifetime_Perms). *)
+
+    (** Hide the lifetime alloc perm *)
     apply Frame.
 
+    (** Split the write type *)
     eapply Weak; [| reflexivity |].
     {
       rewrite sep_conj_Perms_commut.
@@ -3144,6 +3144,8 @@ Section Perms.
       apply SplitL.
       apply nonLifetime_IsNat.
     }
+
+    (** Weaken write into a read *)
     eapply Weak; [| reflexivity |].
     {
       rewrite <- sep_conj_Perms_assoc.
@@ -3151,8 +3153,11 @@ Section Perms.
       apply weaken_when_ptr.
     }
 
+    (** Move out the content type *)
     rewrite sep_conj_Perms_commut.
     apply WhenPtrE. intros v.
+
+    (** duplicate the read type *)
     eapply Weak; [| reflexivity |].
     {
       rewrite sep_conj_Perms_commut.
@@ -3160,6 +3165,8 @@ Section Perms.
       apply sep_conj_Perms_monotone; [reflexivity |].
       eapply WhenReadDup.
     }
+
+    (** Use one duplicate with cast to give the other pointer the same type *)
     eapply Weak; [| reflexivity |].
     {
       rewrite <- sep_conj_Perms_assoc.
@@ -3170,16 +3177,9 @@ Section Perms.
       apply sep_conj_Perms_monotone; [| reflexivity].
       apply Cast.
     }
-    (* eapply Weak; [| reflexivity |]. *)
-    (* { *)
-    (*   do 2 rewrite <- sep_conj_Perms_assoc. *)
-    (*   apply sep_conj_Perms_monotone; [| reflexivity]. *)
-    (*   apply ExE. *)
-    (* } *)
-    (* destruct xs as [n []]. unfold projT1, projT2. *)
 
+    (** Handle [t] *)
     rewrite sep_conj_Perms_commut.
-
     replace (Ret tt) with (Ret tt;; Ret tt : itree (sceE Ss) unit).
     2: {
       apply bisimulation_is_eq. rewrite bind_ret_l. reflexivity.
@@ -3191,6 +3191,7 @@ Section Perms.
       apply typing_t.
     }
 
+    (** Put the isNat type back in the pointer type *)
     intros [] [].
     eapply Weak; [apply PermsE | reflexivity |].
     eapply Weak; [| reflexivity |].
@@ -3213,6 +3214,7 @@ Section Perms.
       apply sep_conj_Perms_monotone; [reflexivity |].
       apply WhenPtrI.
     }
+    (** Return the read type to the lownedP *)
     eapply Weak; [| reflexivity |].
     {
       rewrite sep_conj_Perms_commut.
@@ -3220,6 +3222,7 @@ Section Perms.
       apply nonLifetime_IsNat.
     }
 
+    (** Handle the endLifetime *)
     replace (Ret tt) with (Ret tt;; Ret tt : itree (sceE Ss) unit).
     2: {
       apply bisimulation_is_eq. rewrite bind_ret_l. reflexivity.
@@ -3228,6 +3231,7 @@ Section Perms.
     eapply StopL.
     constructor. apply nonLifetime_IsNat. constructor.
 
+    (** Handle the final ret l *)
     intros [] [].
     eapply Weak; [| reflexivity | apply Ret_].
     etransitivity. apply PermsE.
