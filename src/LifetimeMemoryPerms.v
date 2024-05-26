@@ -3103,11 +3103,10 @@ Section Perms.
               p :: when_ptr l (R, 0, eqp v) ▷ tt *
               p' :: when_ptr l (R, 0, eqp v) ▷ tt)).
 
-  Lemma lifetime_ex2 b o xs p' :
+  Lemma lifetime_ex2 b o xs :
     lifetime_Perms *
-      (VPtr (b, o)) :: ptr (W, 0, IsNat Si Ss) ▷ xs *
-      p' :: eqp (VPtr (b, o)) ▷ tt ⊢
-        (l <- beginLifetime;; t p' (VPtr (b, o));; endLifetime l;; Ret l) ⤳
+      (VPtr (b, o)) :: ptr (W, 0, IsNat Si Ss) ▷ xs ⊢
+        (l <- beginLifetime;; t (VPtr (b, o)) (VPtr (b, o));; endLifetime l;; Ret l) ⤳
         (Ret tt) :::
         (lfinishedP [(b, o, 0, existT _ {nat & unit} isNat)] (xs, tt) ∅ lifetime_Perms).
   Proof.
@@ -3118,7 +3117,6 @@ Section Perms.
     }
     eapply Bind.
     {
-      rewrite <- sep_conj_Perms_assoc.
       apply Frame.
       apply StartL.
     }
@@ -3138,8 +3136,6 @@ Section Perms.
     eapply Weak; [| reflexivity |].
     {
       rewrite sep_conj_Perms_commut.
-      rewrite sep_conj_Perms_assoc.
-      apply sep_conj_Perms_monotone; [| reflexivity].
       rewrite sep_conj_Perms_commut.
       apply SplitL.
       apply nonLifetime_IsNat.
@@ -3148,7 +3144,6 @@ Section Perms.
     (** Weaken write into a read *)
     eapply Weak; [| reflexivity |].
     {
-      rewrite <- sep_conj_Perms_assoc.
       apply sep_conj_Perms_monotone; [| reflexivity].
       apply weaken_when_ptr.
     }
@@ -3166,19 +3161,8 @@ Section Perms.
       eapply WhenReadDup.
     }
 
-    (** Use one duplicate with cast to give the other pointer the same type *)
-    eapply Weak; [| reflexivity |].
-    {
-      rewrite <- sep_conj_Perms_assoc.
-      apply sep_conj_Perms_monotone; [reflexivity |].
-      rewrite <- sep_conj_Perms_assoc.
-      apply sep_conj_Perms_monotone; [reflexivity |].
-      rewrite sep_conj_Perms_assoc.
-      apply sep_conj_Perms_monotone; [| reflexivity].
-      apply Cast.
-    }
-
     (** Handle [t] *)
+    rewrite <- sep_conj_Perms_assoc.
     rewrite sep_conj_Perms_commut.
     replace (Ret tt) with (Ret tt;; Ret tt : itree (sceE Ss) unit).
     2: {
@@ -3191,7 +3175,7 @@ Section Perms.
       apply typing_t.
     }
 
-    (** Put the isNat type back in the pointer type *)
+    (** Drop the trueP and the extra read type *)
     intros [] [].
     eapply Weak; [apply PermsE | reflexivity |].
     eapply Weak; [| reflexivity |].
@@ -3209,6 +3193,7 @@ Section Perms.
       apply sep_conj_Perms_monotone; [reflexivity |].
       apply lte_r_sep_conj_Perms.
     }
+    (** Put the isNat type back in the pointer type *)
     eapply Weak; [| reflexivity |].
     {
       apply sep_conj_Perms_monotone; [reflexivity |].
