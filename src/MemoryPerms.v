@@ -1755,7 +1755,7 @@ Section MemoryPerms.
       (VNum 0, p).
 
   Definition nth_s (n : nat) (l : nelist Rs) : itree (sceE Ss) Rs :=
-    iter (fun '(i, l') =>
+    ITree.iter (fun '(i, l') =>
             match i with
             | existT _ i _ =>
                 Ret tt;;
@@ -2074,7 +2074,7 @@ Section MemoryPerms.
       (VNum 0, p).
 
   Definition length_s {A} (l : list A) : itree (sceE Ss) Rs :=
-    iter (fun '(i, l) =>
+    ITree.iter (fun '(i, l) =>
             sum_rect (fun _ => itree (sceE Ss) (((sigT (fun _ : nat => unit)) * list A) +
                                                (sigT (fun _ : nat => unit))))
               (fun _ : unit => Ret (inr i))

@@ -5,6 +5,8 @@ From Coq Require Import
      Lists.List
      Relations.Relation_Operators
      Relations.Operators_Properties.
+
+From Heapster Require Import Utils.
 (* end hide *)
 
 Section Permissions.

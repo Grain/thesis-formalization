@@ -22,6 +22,8 @@ Local Open Scope itree_scope.
 Import ListNotations.
 (* end hide *)
 
+Ltac Tauto.intuition_solver ::= auto with *.
+
 (** * Lens typeclass *)
 Class Lens (A B : Type) : Type :=
   {
