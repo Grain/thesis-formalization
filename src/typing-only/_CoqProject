@@ -1,7 +1,0 @@
--R . Heapster
-
-Permissions.v
-Memory.v
-Config.v
-Step.v
-Typing.v

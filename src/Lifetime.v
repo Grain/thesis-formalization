@@ -115,32 +115,6 @@ Proof.
         destruct (nth_error ls l'); [destruct s |]; cbn; auto.
 Qed.
 
-Lemma Lifetimes_lte_replace_list_index_inv ls ls' l s :
-  Lifetimes_lte (replace_list_index ls l s) (replace_list_index ls' l s) ->
-  statusOf_lte (statusOf l ls) (statusOf l ls') ->
-  Lifetimes_lte ls ls'.
-Proof.
-  intros Hreplace Hl l'. specialize (Hreplace l').
-  destruct (Compare_dec.lt_eq_lt_dec l l') as [[? | ?] | ?]; subst; auto.
-
-  (* destruct (Peano_dec.dec_eq_nat l l'); subst; auto. *)
-  destruct (Compare_dec.dec_lt l (length ls)).
-  -
-    destruct (Compare_dec.dec_lt l (length ls')).
-Admitted.
-
-Lemma Lifetimes_lte_replace_list_index ls ls' l s :
-  Lifetimes_lte ls ls' ->
-  Lifetimes_lte (replace_list_index ls l s) (replace_list_index ls' l s).
-Proof.
-  repeat intro.
-  destruct (Peano_dec.dec_eq_nat l l0).
-  - subst. red in H. unfold statusOf in *. do 2 rewrite nth_error_replace_list_index_eq.
-    reflexivity.
-  - destruct (Compare_dec.dec_lt l (length ls)).
-    + cbn.
-Abort. (* not used right now *)
-
 (** * Lifetime Computations *)
 Section LifetimeOps.
   Context {Si Ss : Type}.
